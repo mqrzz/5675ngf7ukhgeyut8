@@ -1,106 +1,14 @@
--- Flowgram backend schema (PostgreSQL)
--- Соответствует архитектуре, обсуждённой ранее: один движок, JSON-сценарии, usage-based тарифы
-
-CREATE TABLE users (
-  id            SERIAL PRIMARY KEY,
-  email         VARCHAR(255) UNIQUE NOT NULL,
-  name          VARCHAR(255),
-  plan          VARCHAR(20) NOT NULL DEFAULT 'free', -- free | start | pro | business | enterprise
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE bots (
-  id              SERIAL PRIMARY KEY,
-  owner_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name            VARCHAR(255) NOT NULL,
-  telegram_token  BYTEA NOT NULL,          -- зашифровано на уровне приложения (AES-256-GCM), см. src/crypto.js
-  telegram_username VARCHAR(255),
-  status          VARCHAR(20) NOT NULL DEFAULT 'draft', -- draft | active | paused | deleted
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX idx_bots_owner ON bots(owner_id);
-
-CREATE TABLE scenarios (
-  bot_id      INTEGER PRIMARY KEY REFERENCES bots(id) ON DELETE CASCADE,
-  data        JSONB NOT NULL,              -- текущий опубликованный сценарий (nodes+edges из builder.html)
-  version     INTEGER NOT NULL DEFAULT 1,
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE scenario_versions (
-  id          SERIAL PRIMARY KEY,
-  bot_id      INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
-  version     INTEGER NOT NULL,
-  data        JSONB NOT NULL,
-  published_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX idx_versions_bot ON scenario_versions(bot_id, version DESC);
-
--- конечные пользователи ботов (не путать с users — теми, кто владеет ботом)
-CREATE TABLE bot_users (
-  id          SERIAL PRIMARY KEY,
-  bot_id      INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
-  chat_id     BIGINT NOT NULL,
-  vars        JSONB NOT NULL DEFAULT '{}', -- переменные сценария для этого пользователя
-  status      VARCHAR(20) NOT NULL DEFAULT 'active', -- active | blocked
-  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(bot_id, chat_id)
-);
-CREATE INDEX idx_bot_users_bot ON bot_users(bot_id);
-
-CREATE TABLE messages_log (
-  id          BIGSERIAL PRIMARY KEY,
-  bot_id      INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
-  chat_id     BIGINT NOT NULL,
-  direction   VARCHAR(3) NOT NULL,         -- in | out
-  node_id     VARCHAR(64),
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX idx_log_bot_time ON messages_log(bot_id, created_at DESC);
-
-CREATE TABLE broadcasts (
-  id          SERIAL PRIMARY KEY,
-  bot_id      INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
-  text        TEXT NOT NULL,
-  audience    VARCHAR(50) NOT NULL DEFAULT 'all',
-  status      VARCHAR(20) NOT NULL DEFAULT 'queued', -- queued | sending | done | failed
-  total       INTEGER NOT NULL DEFAULT 0,
-  delivered   INTEGER NOT NULL DEFAULT 0,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE integrations (
-  id          SERIAL PRIMARY KEY,
-  bot_id      INTEGER NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
-  type        VARCHAR(50) NOT NULL,        -- yookassa | robokassa | google_sheets | webhook | ...
-  config      JSONB NOT NULL DEFAULT '{}', -- секреты внутри тоже шифруются на уровне приложения
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE subscriptions (
-  id            SERIAL PRIMARY KEY,
-  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  plan          VARCHAR(20) NOT NULL,
-  status        VARCHAR(20) NOT NULL DEFAULT 'active', -- active | canceled | past_due
-  current_period_end TIMESTAMPTZ NOT NULL,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE payments (
-  id          SERIAL PRIMARY KEY,
-  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  amount      INTEGER NOT NULL,            -- в копейках
-  provider    VARCHAR(30) NOT NULL,        -- yookassa | robokassa | cloudpayments
-  provider_payment_id VARCHAR(255),
-  status      VARCHAR(20) NOT NULL,        -- succeeded | failed | pending
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- счётчики использования за текущий расчётный период — на них держатся лимиты тарифа
-CREATE TABLE usage (
-  bot_id          INTEGER PRIMARY KEY REFERENCES bots(id) ON DELETE CASCADE,
-  period_start    DATE NOT NULL,
-  messages_count  INTEGER NOT NULL DEFAULT 0,
-  broadcasts_count INTEGER NOT NULL DEFAULT 0,
-  users_count     INTEGER NOT NULL DEFAULT 0
-);
+create extension if not exists pgcrypto;
+create table users(id uuid primary key default gen_random_uuid(),email text unique not null,name text,plan text not null default 'free',country text,created_at timestamptz not null default now());
+create table oauth_accounts(provider text not null,provider_uid text not null,user_id uuid not null references users on delete cascade,primary key(provider,provider_uid));
+create table login_codes(email text primary key,code_hash text not null,attempts int not null default 0,expires_at timestamptz not null);
+create table sessions(token_hash text primary key,user_id uuid not null references users on delete cascade,ip text,expires_at timestamptz not null,created_at timestamptz not null default now());
+create table api_keys(id uuid primary key default gen_random_uuid(),user_id uuid not null references users on delete cascade,name text not null,prefix text not null,key_hash text unique not null,created_at timestamptz not null default now(),last_used_at timestamptz,revoked_at timestamptz);
+create table domains(id uuid primary key default gen_random_uuid(),user_id uuid not null references users on delete cascade,name text not null,status text not null default 'pending',sending_ok boolean not null default false,receiving_ok boolean not null default false,dkim_selector text not null,dkim_public text not null,dkim_private_enc text not null,created_at timestamptz not null default now(),verified_at timestamptz);
+create unique index domains_verified_name on domains(name) where status='verified';
+create index domains_user on domains(user_id);
+create table emails(id uuid primary key default gen_random_uuid(),user_id uuid not null references users on delete cascade,domain_id uuid references domains on delete set null,api_key_id uuid references api_keys on delete set null,direction text not null check(direction in('out','in')),from_addr text not null,to_addrs jsonb not null,subject text,html text,text_body text,message_id text,in_reply_to text,status text not null default 'queued',error text,created_at timestamptz not null default now());
+create index emails_user_time on emails(user_id,created_at desc);
+create table events(id bigserial primary key,email_id uuid references emails on delete cascade,type text not null,data jsonb,created_at timestamptz not null default now());
+create table suppressions(user_id uuid not null references users on delete cascade,address text not null,reason text not null,created_at timestamptz not null default now(),primary key(user_id,address));
+create table webhooks(id uuid primary key default gen_random_uuid(),user_id uuid not null references users on delete cascade,url text not null,secret text not null,events text[] not null default '{}',active boolean not null default true,created_at timestamptz not null default now());
