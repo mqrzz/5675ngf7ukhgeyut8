@@ -1,5 +1,5 @@
 [Unit]
-Description=geserd API
+Description=Geserd API
 After=network.target postgresql.service
 
 [Service]

@@ -8,7 +8,7 @@ const {sha,w,startSession}=require('../auth');
 const mailer=nodemailer.createTransport({sendmail:true,newline:'unix',path:'/usr/sbin/sendmail'});
 const FROM=process.env.FROM_EMAIL||('noreply@'+(process.env.MAIL_HOST||'localhost'));
 function sendCodeMail(to,code){
- return mailer.sendMail({from:FROM,to:to,subject:'Your geserd sign-in code',
+ return mailer.sendMail({from:FROM,to:to,subject:'Your Geserd sign-in code',
   text:'Your code is '+code+'. It expires in 10 minutes. If you did not request this, ignore this email.',
   html:'<p>Your code is <b style="font-size:20px;letter-spacing:2px">'+code+'</b>.</p><p>It expires in 10 minutes. If you did not request this, ignore this email.</p>'});
 }
@@ -75,7 +75,7 @@ const PROVIDERS={
  }
 };
 
-function baseUrl(){return process.env.APP_URL||'https://geserd.antviz.ru'}
+function baseUrl(){return process.env.APP_URL||'https://geserd.com'}
 function signState(obj){const p=Buffer.from(JSON.stringify(obj)).toString('base64url');const h=c.createHmac('sha256',process.env.SECRET_KEY||'').update(p).digest('base64url');return p+'.'+h}
 function verifyState(s){const[p,h]=String(s||'').split('.');if(!p||!h)return null;const h2=c.createHmac('sha256',process.env.SECRET_KEY||'').update(p).digest('base64url');if(h2!==h)return null;try{const o=JSON.parse(Buffer.from(p,'base64url').toString('utf8'));if(Date.now()-o.t>600000)return null;return o}catch{return null}}
 
