@@ -24,6 +24,13 @@ grep -h "$TO" /var/log/mail.log 2>/dev/null | tail -6 | sed 's/^/         /' || 
 journalctl -u postfix --since "-2min" --no-pager 2>/dev/null | grep -i "$TO" | tail -4 | sed 's/^/         /'
 echo "7) API log (last mail errors)"
 journalctl -u geserd-api -n 200 --no-pager 2>/dev/null | grep -i "mail send failed" -A3 | tail -8 | sed 's/^/         /'
+echo "8) DNS for $(echo "$FROM" | cut -d@ -f2) as the world sees it (Gmail needs SPF or DKIM to pass; DMARC recommended)"
+D=$(echo "$FROM" | cut -d@ -f2); q(){ dig +short TXT "$1" 2>/dev/null | tr -d '"' | head -3; }
+command -v dig >/dev/null || { echo "  (install dig: apt-get install -y dnsutils)"; }
+SPF=$(q $D | grep -i 'v=spf1'); [ -n "$SPF" ] && ok "SPF: $SPF" || bad "no SPF TXT record on $D"
+DK=$(q mail._domainkey.$D | grep -i 'v=DKIM1'); [ -n "$DK" ] && ok "DKIM record mail._domainkey.$D exists" || bad "no DKIM record mail._domainkey.$D  -> run geserd-mail-auth-setup and add the printed records"
+DM=$(q _dmarc.$D | grep -i 'v=DMARC1'); [ -n "$DM" ] && ok "DMARC: $DM" || bad "no DMARC record _dmarc.$D"
+systemctl is-active --quiet opendkim && ok "opendkim is running" || bad "opendkim is not running -> run geserd-mail-auth-setup"
 echo
 echo "Reading the result: status=sent in step 6 but no email in the inbox = the recipient rejected/spam-filtered it. Check the spam folder, then"
 echo "SPF (TXT on geserd.com), DKIM signing for geserd.com in OpenDKIM, DMARC and the PTR of the server IP. status=deferred/bounced shows the exact reason."

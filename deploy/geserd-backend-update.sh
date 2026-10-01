@@ -16,6 +16,7 @@ if ! sed "s|^ExecStart=.*|ExecStart=$NODE src/server.js|" deploy/geserd-api.serv
   systemctl daemon-reload
 fi
 printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-mail-check.sh "$@"\n' > /usr/local/bin/geserd-mail-check; chmod 755 /usr/local/bin/geserd-mail-check
+printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-mail-auth-setup.sh "$@"\n' > /usr/local/bin/geserd-mail-auth-setup; chmod 755 /usr/local/bin/geserd-mail-auth-setup
 systemctl restart geserd-api
 sleep 2
 curl -fsS localhost:3001/api/health; echo

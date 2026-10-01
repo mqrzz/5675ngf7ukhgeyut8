@@ -13,12 +13,21 @@ function sendCodeMail(to,code){
   html:'<p>Your code is <b style="font-size:20px;letter-spacing:2px">'+code+'</b>.</p><p>It expires in 10 minutes. If you did not request this, ignore this email.</p>'});
 }
 
-// --- region gate: Cloudflare sets CF-IPCountry; unknown => fail open (allow) with a TODO for a real geoip fallback ---
-function countryOf(req){const cc=req.headers['cf-ipcountry'];return cc&&cc!=='XX'?String(cc).toUpperCase():null}
+// --- region gate: ONE source of truth for the UI and for the OAuth gate. Order: CF-IPCountry (if behind Cloudflare) -> offline GeoIP
+// database (geoip-lite, looks up the real client IP that nginx passes in X-Forwarded-For, `trust proxy` is on) -> null (unknown: no RU restriction). ---
+let geoip=null;try{geoip=require('geoip-lite')}catch(e){console.warn('geoip-lite not installed - run geserd-backend-update')}
+function countryOf(req){
+ const cf=req.headers['cf-ipcountry'];
+ if(cf&&cf!=='XX'&&cf!=='T1')return String(cf).toUpperCase();
+ try{const g=geoip&&geoip.lookup(req.ip);if(g&&g.country)return g.country}catch(e){}
+ return null;
+}
 function allowedProviders(country){
  if(country==='RU')return['yandex'];
  return['github','google'];
 }
+// GET /api/auth/geo -> {country, providers}. The login/signup pages draw their buttons from THIS, so what is shown always equals what is allowed.
+r.get('/geo',(req,res)=>{const country=countryOf(req);res.set('Cache-Control','no-store');res.json({country,providers:allowedProviders(country)})});
 
 // --- request-code: simple in-memory throttle, 1 per email+ip per 60s ---
 const EMAIL_RX=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -123,6 +132,14 @@ r.get('/oauth/:provider/callback',w(async(req,res)=>{
  }
  await startSession(res,userId,req.ip);
  res.redirect('/app/')
+}));
+
+// --- logout: drop the session row and clear the cookie (safe to call without a session) ---
+r.post('/logout',w(async(req,res)=>{
+ const m=/(?:^|; )gs_sid=([^;]+)/.exec(req.headers.cookie||'');const tok=m&&m[1];
+ if(tok)await q('delete from sessions where token_hash=$1',[sha(tok)]);
+ res.clearCookie('gs_sid',{path:'/'});
+ res.json({ok:true})
 }));
 
 module.exports=r;
