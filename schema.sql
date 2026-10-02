@@ -12,3 +12,9 @@ create index if not exists emails_user_time on emails(user_id,created_at desc);
 create table if not exists events(id bigserial primary key,email_id uuid references emails on delete cascade,type text not null,data jsonb,created_at timestamptz not null default now());
 create table if not exists suppressions(user_id uuid not null references users on delete cascade,address text not null,reason text not null,created_at timestamptz not null default now(),primary key(user_id,address));
 create table if not exists webhooks(id uuid primary key default gen_random_uuid(),user_id uuid not null references users on delete cascade,url text not null,secret text not null,events text[] not null default '{}',active boolean not null default true,created_at timestamptz not null default now());
+-- Free Geserd sub-domains (you@<slug>.geserd.com) for people without their own domain. Signed with the parent domain's DKIM key by OpenDKIM.
+create table if not exists subdomains(slug text primary key,user_id uuid not null references users on delete cascade,created_at timestamptz not null default now());
+create index if not exists subdomains_user on subdomains(user_id);
+create index if not exists emails_user_dir_time on emails(user_id,direction,created_at desc);
+-- Contact form submissions (also e-mailed to CONTACT_TO when that is set in .env).
+create table if not exists contact_messages(id uuid primary key default gen_random_uuid(),name text,email text not null,topic text not null,message text not null,ip text,user_id uuid references users on delete set null,created_at timestamptz not null default now());

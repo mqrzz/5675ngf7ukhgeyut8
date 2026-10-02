@@ -1,33 +1,32 @@
 const r=require('express').Router();
 const c=require('crypto');
-const nodemailer=require('nodemailer');
 const {q}=require('../db');
-const {sha,w,startSession}=require('../auth');
+const {sha,w,need,sessionOnly,startSession}=require('../auth');
 
 // --- local mail via the server's own Postfix (same MTA planned for sending) ---
-const mailer=nodemailer.createTransport({sendmail:true,newline:'unix',path:'/usr/sbin/sendmail'});
-const FROM=process.env.FROM_EMAIL||('noreply@'+(process.env.MAIL_HOST||'localhost'));
-function sendCodeMail(to,code){
- return mailer.sendMail({from:FROM,to:to,subject:'Your Geserd sign-in code',
-  text:'Your code is '+code+'. It expires in 10 minutes. If you did not request this, ignore this email.',
-  html:'<p>Your code is <b style="font-size:20px;letter-spacing:2px">'+code+'</b>.</p><p>It expires in 10 minutes. If you did not request this, ignore this email.</p>'});
-}
+const {sendCodeMail}=require('../mailer');
+const LANGS=['en','ru','fr','de'];
 
 // --- region gate: ONE source of truth for the UI and for the OAuth gate. Order: CF-IPCountry (if behind Cloudflare) -> offline GeoIP
 // database (geoip-lite, looks up the real client IP that nginx passes in X-Forwarded-For, `trust proxy` is on) -> null (unknown: no RU restriction). ---
 let geoip=null;try{geoip=require('geoip-lite')}catch(e){console.warn('geoip-lite not installed - run geserd-backend-update')}
-function countryOf(req){
+function geoInfo(req){
  const cf=req.headers['cf-ipcountry'];
- if(cf&&cf!=='XX'&&cf!=='T1')return String(cf).toUpperCase();
- try{const g=geoip&&geoip.lookup(req.ip);if(g&&g.country)return g.country}catch(e){}
- return null;
+ if(cf&&cf!=='XX'&&cf!=='T1')return{country:String(cf).toUpperCase(),source:'cloudflare'};
+ try{const g=geoip&&geoip.lookup(req.ip);if(g&&g.country)return{country:g.country,source:'geoip'}}catch(e){}
+ return{country:null,source:geoip?'unknown-ip':'no-geoip-db'};
 }
+function countryOf(req){return geoInfo(req).country}
 function allowedProviders(country){
  if(country==='RU')return['yandex'];
  return['github','google'];
 }
 // GET /api/auth/geo -> {country, providers}. The login/signup pages draw their buttons from THIS, so what is shown always equals what is allowed.
-r.get('/geo',(req,res)=>{const country=countryOf(req);res.set('Cache-Control','no-store');res.json({country,providers:allowedProviders(country)})});
+r.get('/geo',(req,res)=>{
+ const gi=geoInfo(req),country=gi.country;res.set('Cache-Control','no-store');
+ const out={country,providers:allowedProviders(country)};
+ if(req.query.debug!==undefined)Object.assign(out,{source:gi.source,seen_ip:req.ip,x_forwarded_for:req.headers['x-forwarded-for']||null,cf_ipcountry:req.headers['cf-ipcountry']||null});
+ res.json(out)});
 
 // --- request-code: simple in-memory throttle, 1 per email+ip per 60s ---
 const EMAIL_RX=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -42,7 +41,8 @@ r.post('/request-code',w(async(req,res)=>{
  throttle.set(key,Date.now());
  const code=String(c.randomInt(0,1000000)).padStart(6,'0');
  await q('insert into login_codes(email,code_hash,attempts,expires_at) values($1,$2,0,now()+interval \'10 minutes\') on conflict(email) do update set code_hash=$2,attempts=0,expires_at=now()+interval \'10 minutes\'',[email,sha(code)]);
- try{await sendCodeMail(email,code)}catch(e){console.error('mail send failed',e);return res.status(502).json({error:'mail_failed'})}
+ const lang=LANGS.includes(req.body.lang)?req.body.lang:'en';
+ try{await sendCodeMail(email,code,lang)}catch(e){console.error('mail send failed',e);return res.status(502).json({error:'mail_failed'})}
  res.json({ok:true})
 }));
 
@@ -57,7 +57,8 @@ r.post('/verify-code',w(async(req,res)=>{
  let [u]=await q('select id from users where email=$1',[email]);
  if(!u)[u]=await q('insert into users(email,country) values($1,$2) returning id',[email,countryOf(req)]);
  await startSession(res,u.id,req.ip);
- res.json({ok:true})
+ const [nm]=await q('select name from users where id=$1',[u.id]);
+ res.json({ok:true,needs_name:!(nm&&nm.name)})
 }));
 
 // --- OAuth: GitHub / Google / Yandex, region-gated server-side ---
@@ -140,6 +141,14 @@ r.post('/logout',w(async(req,res)=>{
  if(tok)await q('delete from sessions where token_hash=$1',[sha(tok)]);
  res.clearCookie('gs_sid',{path:'/'});
  res.json({ok:true})
+}));
+
+// --- who am I: used by the login pages (already signed in -> go to the dashboard), the header (Dashboard button) and the dashboard itself ---
+r.get('/me',need,w(async(req,res)=>{const [u]=await q('select id,email,name,plan from users where id=$1',[req.user.id]);res.set('Cache-Control','no-store');res.json(u)}));
+r.patch('/me',need,sessionOnly,w(async(req,res)=>{
+ const name=String(req.body.name||'').replace(/[\u0000-\u001f]/g,' ').trim().slice(0,60);
+ if(name.length<1)return res.status(400).json({error:'invalid_name'});
+ await q('update users set name=$2 where id=$1',[req.user.id,name]);res.json({ok:true,name})
 }));
 
 module.exports=r;

@@ -1,8 +1,9 @@
-const r=require('express').Router();const c=require('crypto');const {q}=require('../db');const {w,need,sessionOnly,sha}=require('../auth');
+const r=require('express').Router();const c=require('crypto');const {q}=require('../db');const {w,need,sessionOnly,sha}=require('../auth');const PLANS=require('../plans');
 r.use(need,sessionOnly);
 r.get('/',w(async(req,res)=>res.json(await q('select id,name,prefix,created_at,last_used_at from api_keys where user_id=$1 and revoked_at is null order by created_at desc',[req.user.id]))));
 r.post('/',w(async(req,res)=>{const name=String(req.body.name||'').trim().slice(0,60)||'Untitled';
- const n=(await q('select count(*)::int n from api_keys where user_id=$1 and revoked_at is null',[req.user.id]))[0].n;if(n>=20)return res.status(400).json({error:'limit_reached'});
+ const [{plan}]=await q('select plan from users where id=$1',[req.user.id]);
+ const n=(await q('select count(*)::int n from api_keys where user_id=$1 and revoked_at is null',[req.user.id]))[0].n;if(n>=(PLANS[plan]||PLANS.free).keys)return res.status(403).json({error:'plan_limit'});
  const key='gs_'+c.randomBytes(24).toString('base64url');
  const [row]=await q('insert into api_keys(user_id,name,prefix,key_hash) values($1,$2,$3,$4) returning id,name,prefix,created_at',[req.user.id,name,key.slice(0,10),sha(key)]);
  res.status(201).json({...row,key})}));

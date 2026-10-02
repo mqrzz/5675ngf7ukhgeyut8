@@ -4,6 +4,13 @@ app.get('/api/health',async(_,res)=>{try{await q('select 1');res.json({ok:true})
 app.use('/api/auth',require('./routes/auth'));
 app.use('/api/api-keys',require('./routes/keys'));
 app.use('/api/domains',require('./routes/domains'));
+app.use('/api/emails',require('./routes/emails'));
+app.use('/api/subdomain',require('./routes/subdomain'));
+app.use('/api/usage',require('./routes/usage'));
+app.use('/api/contact',require('./routes/contact'));
 app.use('/api',(_,res)=>res.status(404).json({error:'not_found'}));
 app.use((e,_q,res,_n)=>{console.error(e);res.status(500).json({error:'server_error'})});
+// log retention per plan (free 1 day ... business 30 days): purge old emails hourly
+const PL=require('./plans');
+setInterval(()=>{for(const[p,v]of Object.entries(PL))q("delete from emails e using users u where e.user_id=u.id and u.plan=$1 and e.created_at<now()-($2||' days')::interval",[p,String(v.logDays)]).catch(e=>console.error('retention',e.message))},3600000).unref();
 const port=process.env.PORT||3001;app.listen(port,'127.0.0.1',()=>console.log('geserd api on 127.0.0.1:'+port));
