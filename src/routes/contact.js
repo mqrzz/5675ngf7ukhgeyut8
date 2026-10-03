@@ -1,10 +1,9 @@
-// POST /api/contact — public contact form. Stored in the database and e-mailed to CONTACT_TO (set it in .env; if empty the message is only stored).
 const r=require('express').Router();const {q}=require('../db');const {w}=require('../auth');const {transport,FROM}=require('../mailer');
 const TOPICS=['general','sales','security','abuse'];const EMAIL_RX=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const hits=new Map();setInterval(()=>{const n=Date.now();for(const[k,v]of hits)if(n-v.t>3600000)hits.delete(k)},600000).unref();
 r.post('/',w(async(req,res)=>{
  const b=req.body||{};
- if(b.website)return res.json({ok:true});                       // honeypot: bots fill the hidden field, humans never see it
+ if(b.website)return res.json({ok:true});
  const name=String(b.name||'').replace(/[\r\n]/g,' ').trim().slice(0,80),email=String(b.email||'').trim().toLowerCase().slice(0,254),topic=TOPICS.includes(b.topic)?b.topic:'general',message=String(b.message||'').trim().slice(0,5000);
  if(!EMAIL_RX.test(email))return res.status(400).json({error:'invalid_email'});
  if(message.length<10)return res.status(400).json({error:'message_too_short'});

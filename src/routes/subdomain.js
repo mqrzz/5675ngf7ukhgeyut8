@@ -1,5 +1,3 @@
-// Free Geserd sub-domains: claim <slug>.geserd.com and send from anything@<slug>.geserd.com without owning a domain.
-// DNS needed once (Cloudflare): wildcard SPF  `*  TXT  v=spf1 ip4:<server ip> ~all`.  DKIM: OpenDKIM signs *@*.geserd.com with the parent key (geserd-mail-auth-setup).
 const r=require('express').Router();const {q}=require('../db');const {w,need,sessionOnly}=require('../auth');const PLANS=require('../plans');
 const BASE=(process.env.BASE_DOMAIN||'geserd.com').toLowerCase();
 const RESERVED=new Set(['www','mail','smtp','imap','pop','api','app','admin','root','postmaster','abuse','security','support','noreply','no-reply','billing','status','docs','blog','help','ftp','ns1','ns2','dns','mx','email','send','geserd','dashboard','login','signup','test','demo']);

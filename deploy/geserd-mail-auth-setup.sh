@@ -1,7 +1,4 @@
 #!/bin/bash
-# Makes mail from geserd.com pass SPF + DKIM + DMARC (Gmail rejects it otherwise: "550 5.7.26 sender is unauthenticated").
-# Safe to re-run. Additive: it never removes existing OpenDKIM/Postfix settings (the server may also sign mail for other domains).
-# Usage (as root):  geserd-mail-auth-setup            -> installs/configures OpenDKIM, prints the DNS records to add
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
 DOMAIN=geserd.com; SEL=mail; IP=$(grep -m1 '^MAIL_IP=' /var/www/geserd-backend/.env 2>/dev/null | cut -d= -f2- || true)
@@ -21,7 +18,6 @@ if [ -z "$KT" ] || [ -z "$ST" ]; then
   cp -a $CONF ${CONF}.bak.$(date +%s) 2>/dev/null || true
   cat >> $CONF <<CFG
 
-# --- added by geserd-mail-auth-setup ---
 Syslog yes
 UMask 007
 Mode sv

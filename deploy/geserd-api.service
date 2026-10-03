@@ -9,7 +9,8 @@ EnvironmentFile=/var/www/geserd-backend/.env
 ExecStart=/usr/bin/node src/server.js
 Restart=always
 RestartSec=3
-MemoryMax=200M
+MemoryMax=250M
+SupplementaryGroups=adm systemd-journal
 
 [Install]
 WantedBy=multi-user.target

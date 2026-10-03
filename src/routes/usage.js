@@ -1,4 +1,3 @@
-// GET /api/usage — real numbers for Settings > Usage (plan limits from plans.js + what the account used).
 const r=require('express').Router();const {q}=require('../db');const {w,need}=require('../auth');const PLANS=require('../plans');
 r.use(need);
 r.get('/',w(async(req,res)=>{

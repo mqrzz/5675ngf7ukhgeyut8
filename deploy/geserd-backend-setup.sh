@@ -1,9 +1,4 @@
 #!/bin/bash
-# One-time install of the Geserd backend on the server. Run as root:
-#   bash /var/www/geserd-backend/deploy/geserd-backend-setup.sh
-# The repo URL is needed only if /var/www/geserd-backend is not a git clone yet:
-#   bash geserd-backend-setup.sh https://github.com/YOU/geserd-backend.git
-# Safe to re-run. Never touches antviz*, the old flowgram-* units, or the databases flowgram / antviz.
 set -e
 cd /tmp
 REPO="$1"; DIR=/var/www/geserd-backend
@@ -33,7 +28,6 @@ NODE=$(command -v node); [ -n "$NODE" ] || { echo "node not found"; exit 1; }
 sed "s|^ExecStart=.*|ExecStart=$NODE src/server.js|" "$DIR/deploy/geserd-api.service" > /etc/systemd/system/geserd-api.service
 systemctl daemon-reload; systemctl enable --now geserd-api
 echo "== commands"
-# Tiny wrappers that always run the current scripts from the repo, so a later 'git reset' never leaves them stale.
 printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-backend-update.sh "$@"\n' > /usr/local/bin/geserd-backend-update
 printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-deploy.sh "$@"\n' > /usr/local/bin/geserd-deploy
 chmod 755 /usr/local/bin/geserd-backend-update /usr/local/bin/geserd-deploy

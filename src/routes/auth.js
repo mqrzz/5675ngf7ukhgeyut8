@@ -3,12 +3,9 @@ const c=require('crypto');
 const {q}=require('../db');
 const {sha,w,need,sessionOnly,startSession}=require('../auth');
 
-// --- local mail via the server's own Postfix (same MTA planned for sending) ---
 const {sendCodeMail}=require('../mailer');
 const LANGS=['en','ru','fr','de'];
 
-// --- region gate: ONE source of truth for the UI and for the OAuth gate. Order: CF-IPCountry (if behind Cloudflare) -> offline GeoIP
-// database (geoip-lite, looks up the real client IP that nginx passes in X-Forwarded-For, `trust proxy` is on) -> null (unknown: no RU restriction). ---
 let geoip=null;try{geoip=require('geoip-lite')}catch(e){console.warn('geoip-lite not installed - run geserd-backend-update')}
 function geoInfo(req){
  const cf=req.headers['cf-ipcountry'];
@@ -21,14 +18,12 @@ function allowedProviders(country){
  if(country==='RU')return['yandex'];
  return['github','google'];
 }
-// GET /api/auth/geo -> {country, providers}. The login/signup pages draw their buttons from THIS, so what is shown always equals what is allowed.
 r.get('/geo',(req,res)=>{
  const gi=geoInfo(req),country=gi.country;res.set('Cache-Control','no-store');
  const out={country,providers:allowedProviders(country)};
  if(req.query.debug!==undefined)Object.assign(out,{source:gi.source,seen_ip:req.ip,x_forwarded_for:req.headers['x-forwarded-for']||null,cf_ipcountry:req.headers['cf-ipcountry']||null});
  res.json(out)});
 
-// --- request-code: simple in-memory throttle, 1 per email+ip per 60s ---
 const EMAIL_RX=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const throttle=new Map();
 setInterval(()=>{const now=Date.now();for(const[k,t]of throttle)if(now-t>60000)throttle.delete(k)},300000).unref();
@@ -61,7 +56,6 @@ r.post('/verify-code',w(async(req,res)=>{
  res.json({ok:true,needs_name:!(nm&&nm.name)})
 }));
 
-// --- OAuth: GitHub / Google / Yandex, region-gated server-side ---
 const PROVIDERS={
  github:{
   authorize:'https://github.com/login/oauth/authorize',scope:'read:user user:email',
@@ -135,7 +129,6 @@ r.get('/oauth/:provider/callback',w(async(req,res)=>{
  res.redirect('/app/')
 }));
 
-// --- logout: drop the session row and clear the cookie (safe to call without a session) ---
 r.post('/logout',w(async(req,res)=>{
  const m=/(?:^|; )gs_sid=([^;]+)/.exec(req.headers.cookie||'');const tok=m&&m[1];
  if(tok)await q('delete from sessions where token_hash=$1',[sha(tok)]);
@@ -143,7 +136,6 @@ r.post('/logout',w(async(req,res)=>{
  res.json({ok:true})
 }));
 
-// --- who am I: used by the login pages (already signed in -> go to the dashboard), the header (Dashboard button) and the dashboard itself ---
 r.get('/me',need,w(async(req,res)=>{const [u]=await q('select id,email,name,plan from users where id=$1',[req.user.id]);res.set('Cache-Control','no-store');res.json(u)}));
 r.patch('/me',need,sessionOnly,w(async(req,res)=>{
  const name=String(req.body.name||'').replace(/[\u0000-\u001f]/g,' ').trim().slice(0,60);

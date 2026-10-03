@@ -1,4 +1,3 @@
-// Auth: session cookie (gs_sid) or Bearer API key (gs_...). Sets req.user={id,via}.
 const c=require('crypto');const {q}=require('./db');
 const sha=s=>c.createHash('sha256').update(s).digest('hex');
 const w=f=>(a,b,n)=>Promise.resolve(f(a,b,n)).catch(n);

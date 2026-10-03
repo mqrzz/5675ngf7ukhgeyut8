@@ -1,6 +1,4 @@
 #!/bin/bash
-# Diagnose why sign-in code emails do not arrive.   Run as root:  geserd-mail-check you@example.com
-# Read-only except for sending ONE test message to the address you pass. Prints a short verdict per check.
 TO="$1"; [ -n "$TO" ] || { echo "usage: geserd-mail-check you@example.com"; exit 1; }
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
 ENVF=/var/www/geserd-backend/.env

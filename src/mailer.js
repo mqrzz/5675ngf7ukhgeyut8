@@ -1,4 +1,3 @@
-// Outgoing mail: the shared sendmail transport (Postfix) and the branded sign-in code email (HTML + plain-text alternative, 4 languages).
 const nodemailer=require('nodemailer');
 const transport=nodemailer.createTransport({sendmail:true,newline:'unix',path:'/usr/sbin/sendmail'});
 const FROM=process.env.FROM_EMAIL||('noreply@'+(process.env.MAIL_HOST||'localhost'));
@@ -10,26 +9,31 @@ const L={
  de:{subject:'{code} ist Ihr Geserd-Anmeldecode',pre:'Ihr Anmeldecode lautet {code}. Er läuft in 10 Minuten ab.',h:'Ihr Anmeldecode',p:'Geben Sie diesen Code auf der Geserd-Anmeldeseite ein, um fortzufahren.',exp:'Der Code ist 10 Minuten gültig und nur einmal verwendbar.',ign:'Falls Sie das nicht angefordert haben, ignorieren Sie diese E-Mail einfach. Ohne den Code kann niemand auf Ihr Konto zugreifen.',foot:'Gesendet von Geserd'}
 };
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const path=require('path');
+const SANS="-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",SERIF="Georgia,'Times New Roman',serif",MONO="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace";
 function codeMail(lang,code){
- const t=L[lang]||L.en,sp=code.slice(0,3)+' '+code.slice(3);
+ const t=L[lang]||L.en,sp=code.split('').join('&#8202;'),host=APP.replace(/^https?:\/\//,'');
  const text=t.h+'\n\n'+code+'\n\n'+t.p+'\n'+t.exp+'\n\n'+t.ign+'\n\n-- \n'+t.foot+' · '+APP;
- const html='<!doctype html><html lang="'+(L[lang]?lang:'en')+'"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><meta name="supported-color-schemes" content="dark light"><title>'+esc(t.h)+'</title></head>'+
+ const digits=code.split('').map(d=>'<td align="center" width="48" style="width:48px;height:64px;border-radius:16px;background:#141416;border:1px solid #2b2e33;color:#ffffff;font:600 30px/64px '+MONO+';">'+d+'</td>').join('<td width="8" style="width:8px;font-size:0;line-height:0;">&nbsp;</td>');
+ const html='<!doctype html><html lang="'+(L[lang]?lang:'en')+'"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"><title>'+esc(t.h)+'</title></head>'+
  '<body style="margin:0;padding:0;background:#000000;"><div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#000;">'+esc(t.pre.replace('{code}',code))+'</div>'+
- '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#000000;"><tr><td align="center" style="padding:40px 16px;">'+
+ '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" bgcolor="#000000" style="background:#000000;"><tr><td align="center" style="padding:48px 16px 40px;">'+
  '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">'+
- '<tr><td align="center" style="padding:0 0 28px;"><a href="'+APP+'" style="text-decoration:none;"><span style="display:inline-block;width:48px;height:48px;line-height:46px;border:1px solid #2a2d31;border-radius:14px;background:#0b0b0c;color:#f2f2f2;font:600 28px Georgia,\'Times New Roman\',serif;text-align:center;">G</span><br><span style="display:inline-block;margin-top:12px;color:#f2f2f2;font:600 20px Georgia,\'Times New Roman\',serif;letter-spacing:.2px;">Geserd</span></a></td></tr>'+
- '<tr><td style="background:#0b0b0c;border:1px solid #26292d;border-radius:20px;padding:36px 32px;">'+
- '<h1 style="margin:0 0 12px;color:#ffffff;font:400 26px/1.25 Georgia,\'Times New Roman\',serif;text-align:center;">'+esc(t.h)+'</h1>'+
- '<p style="margin:0 0 24px;color:#b0b4ba;font:400 15px/1.6 -apple-system,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;text-align:center;">'+esc(t.p)+'</p>'+
- '<div style="margin:0 auto 24px;padding:18px 12px;border:1px solid #33373c;border-radius:14px;background:#000000;text-align:center;"><span style="color:#ffffff;font:600 34px/1 \'SFMono-Regular\',Menlo,Consolas,\'Liberation Mono\',monospace;letter-spacing:8px;">'+sp+'</span></div>'+
- '<p style="margin:0 0 6px;color:#b0b4ba;font:400 13.5px/1.6 -apple-system,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;text-align:center;">'+esc(t.exp)+'</p>'+
- '<p style="margin:0;color:#7b7f86;font:400 13px/1.6 -apple-system,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;text-align:center;">'+esc(t.ign)+'</p></td></tr>'+
- '<tr><td align="center" style="padding:24px 0 0;color:#5d6168;font:400 12px/1.5 -apple-system,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;">'+esc(t.foot)+' · <a href="'+APP+'" style="color:#7b7f86;text-decoration:underline;">'+APP.replace(/^https?:\/\//,'')+'</a></td></tr>'+
+ '<tr><td align="center" style="padding:0 0 32px;"><a href="'+APP+'" style="text-decoration:none;"><img src="cid:geserd-logo" width="132" alt="Geserd" style="display:block;border:0;outline:none;width:132px;height:auto;"></a></td></tr>'+
+ '<tr><td bgcolor="#0b0b0d" style="background:#0b0b0d;background-image:linear-gradient(180deg,#17171a 0%,#0b0b0d 38%);border:1px solid #26292d;border-radius:28px;padding:44px 32px 40px;">'+
+ '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">'+
+ '<h1 style="margin:0 0 12px;color:#ffffff;font:400 30px/1.2 '+SERIF+';letter-spacing:-.5px;text-align:center;">'+esc(t.h)+'</h1>'+
+ '<p style="margin:0 0 32px;color:#b0b4ba;font:400 15px/1.6 '+SANS+';text-align:center;">'+esc(t.p)+'</p>'+
+ '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;"><tr>'+digits+'</tr></table>'+
+ '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:32px 0 0;"><tr><td align="center" style="padding:14px 18px;border-radius:16px;background:#141416;color:#c9ccd1;font:500 13.5px/1.5 '+SANS+';">'+esc(t.exp)+'</td></tr></table>'+
+ '<p style="margin:28px 0 0;padding-top:24px;border-top:1px solid #1f2226;color:#7b7f86;font:400 13px/1.6 '+SANS+';text-align:center;">'+esc(t.ign)+'</p>'+
+ '</td></tr></table></td></tr>'+
+ '<tr><td align="center" style="padding:28px 0 0;color:#5d6168;font:400 12px/1.6 '+SANS+';">'+esc(t.foot)+' &middot; <a href="'+APP+'" style="color:#8b8f96;text-decoration:underline;">'+host+'</a></td></tr>'+
  '</table></td></tr></table></body></html>';
  return{subject:t.subject.replace('{code}',code),text,html};
 }
 function sendCodeMail(to,code,lang){
  const m=codeMail(lang,code);
- return transport.sendMail({from:{name:'Geserd',address:FROM},to,subject:m.subject,text:m.text,html:m.html,headers:{'Auto-Submitted':'auto-generated','X-Auto-Response-Suppress':'All'}});
+ return transport.sendMail({from:{name:'Geserd',address:FROM},to,subject:m.subject,text:m.text,html:m.html,attachments:[{filename:'geserd.png',path:path.join(__dirname,'..','assets','logo-mail.png'),cid:'geserd-logo',contentDisposition:'inline'}],headers:{'Auto-Submitted':'auto-generated','X-Auto-Response-Suppress':'All'}});
 }
 module.exports={transport,FROM,sendCodeMail,codeMail};
