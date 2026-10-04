@@ -28,3 +28,17 @@ create index if not exists whd_due on webhook_deliveries(next_at) where status='
 create index if not exists whd_hook on webhook_deliveries(webhook_id,created_at desc);
 alter table emails add column if not exists spam_score numeric(5,2);
 alter table emails add column if not exists spam_rules jsonb;
+alter table users add column if not exists lang text;
+alter table users add column if not exists notify jsonb not null default '{"bounce":true,"complaint":true,"quota":true,"domain":true,"ticket":true}';
+alter table users add column if not exists is_admin boolean not null default false;
+alter table sessions add column if not exists ua text;
+create table if not exists notifications(id bigserial primary key,user_id uuid not null references users on delete cascade,type text not null,title text not null,body text,link text,dedupe text,read_at timestamptz,created_at timestamptz not null default now());
+create index if not exists notifications_user on notifications(user_id,created_at desc);
+create unique index if not exists notifications_dedupe on notifications(user_id,dedupe) where dedupe is not null;
+create table if not exists tickets(id uuid primary key default gen_random_uuid(),user_id uuid not null references users on delete cascade,subject text not null,topic text not null default 'other',status text not null default 'open',created_at timestamptz not null default now(),updated_at timestamptz not null default now());
+create index if not exists tickets_user on tickets(user_id,updated_at desc);
+create table if not exists ticket_messages(id bigserial primary key,ticket_id uuid not null references tickets on delete cascade,author text not null check(author in('user','staff')),body text not null,created_at timestamptz not null default now());
+create index if not exists ticket_messages_ticket on ticket_messages(ticket_id,id);
+create table if not exists incidents(id uuid primary key default gen_random_uuid(),title text not null,body text,component text,status text not null default 'investigating',impact text not null default 'minor',started_at timestamptz not null default now(),resolved_at timestamptz);
+create table if not exists status_days(day date not null,component text not null,checks int not null default 0,fails int not null default 0,primary key(day,component));
+

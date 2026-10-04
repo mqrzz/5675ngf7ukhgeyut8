@@ -1,4 +1,4 @@
-const {q}=require('./db');
+const {q}=require('./db');const {notify}=require('./notify');
 const RANK={queued:0,sent:1,delivered:2,bounced:3,complained:4,failed:3,received:2};
 const HOOK={delayed:'delivery_delayed'};
 async function emit(emailId,type,data){
@@ -9,6 +9,7 @@ async function emit(emailId,type,data){
  const rcpt=data&&data.recipient;
  if(rcpt&&((type==='bounced'&&/^5\./.test(data.dsn||'')&&!/^5\.7\./.test(data.dsn||''))||type==='complained'))
   await q('insert into suppressions(user_id,address,reason) values($1,$2,$3) on conflict do nothing',[e.user_id,String(rcpt).toLowerCase(),type==='complained'?'complained':'bounced']);
+ if(e.direction==='out'&&(type==='bounced'||type==='complained')){const who=String(rcpt||(e.to_addrs&&e.to_addrs[0])||'');await notify(e.user_id,type,type==='bounced'?'bounce':'complaint',who+(data&&data.detail?' — '+data.detail:''),'/app/emails/',type+':'+e.id+':'+who)}
  await queueHooks(e,type,data);
  return e;
 }

@@ -1,6 +1,6 @@
 const c=require('crypto');const MailComposer=require('nodemailer/lib/mail-composer');
 const {q}=require('./db');const {dec}=require('./secret');const PLANS=require('./plans');
-const {transport,FROM}=require('./mailer');const {emit}=require('./events');const {toText}=require('./text');const spam=require('./spam');
+const {transport,FROM}=require('./mailer');const {emit}=require('./events');const {toText}=require('./text');const {notify}=require('./notify');const spam=require('./spam');
 const BASE=(process.env.BASE_DOMAIN||'geserd.com').toLowerCase();
 const MAILHOST=(process.env.MAIL_HOST||'geserd.com').replace(/^mail\./,'');
 const ADDR=/^[^\s@<>"',;]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$/i;
@@ -86,6 +86,8 @@ async function send(uid,b,keyId){
  const meta=m.attachments.map(a=>({filename:a.filename,content_type:a.contentType,size:a.content.length}));
  await q("insert into emails(id,user_id,domain_id,api_key_id,direction,from_addr,to_addrs,subject,html,text_body,message_id,status,attachments,spam_score,spam_rules) values($1,$2,$3,$4,'out',$5,$6,$7,$8,$9,$10,'queued',$11,$12,$13)",
   [id,uid,d?d.id:null,keyId||null,m.from.email,JSON.stringify(rcpt),m.subject,m.html,m.text,mid,JSON.stringify(meta),sc?sc.score:null,sc?JSON.stringify(sc.rules):null]);
+ const mon=new Date().toISOString().slice(0,7),day=new Date().toISOString().slice(0,10);
+ for(const[lim,used,scope,key]of[[P.monthly,u.m,'monthly',mon],[P.daily,u.d,'daily',day]]){if(!lim)continue;const before=used/lim,after=(used+rcpt.length)/lim;for(const th of[0.8,1])if(before<th&&after>=th)notify(uid,'quota',th===1?'quota_full':'quota_80',scope+':'+Math.round(th*100),'/app/settings/usage/','quota:'+scope+':'+th+':'+key)}
  try{
   const info=await transport.sendMail({...opts,envelope:{from:FROM,to:rcpt},dkim:signer||undefined});
   await emit(id,'sent',{accepted:info.accepted||rcpt,suppressed:[...sup]});

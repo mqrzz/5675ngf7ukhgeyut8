@@ -1,4 +1,4 @@
-const r=require('express').Router();const c=require('crypto');const dns=require('dns').promises;const {q}=require('../db');const {w,need}=require('../auth');const {enc}=require('../secret');
+const r=require('express').Router();const c=require('crypto');const dns=require('dns').promises;const {q}=require('../db');const {w,need}=require('../auth');const {enc}=require('../secret');const {notify}=require('../notify');
 const PLANS=require('../plans'),RX=/^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 const rec=d=>[{purpose:'dkim',type:'TXT',name:d.dkim_selector+'._domainkey',value:'v=DKIM1; k=rsa; p='+d.dkim_public},
  {purpose:'spf',type:'TXT',name:'@',value:'v=spf1 ip4:'+process.env.SERVER_IP+' ~all'},
@@ -22,7 +22,7 @@ r.post('/',w(async(req,res)=>{const name=String(req.body.name||'').trim().toLowe
 const own=w(async(req,res,next)=>{const [d]=await q('select * from domains where id=$1 and user_id=$2',[req.params.id,req.user.id]);if(!d)return res.status(404).json({error:'not_found'});req.d=d;next()});
 r.get('/:id',own,(req,res)=>res.json(pub(req.d)));
 r.post('/:id/verify',own,w(async(req,res)=>{const ck=await check(req.d),ok=ck.dkim&&ck.spf;
- try{const [d]=await q("update domains set status=$2,sending_ok=$3,receiving_ok=$4,verified_at=case when $3 then coalesce(verified_at,now()) else null end where id=$1 returning *",[req.d.id,ok?'verified':'pending',ok,ok&&ck.mx]);res.json({...pub(d),checks:ck})}
+ try{const [d]=await q("update domains set status=$2,sending_ok=$3,receiving_ok=$4,verified_at=case when $3 then coalesce(verified_at,now()) else null end where id=$1 returning *",[req.d.id,ok?'verified':'pending',ok,ok&&ck.mx]);if(ok&&req.d.status!=='verified')notify(req.user.id,'domain','domain_verified',d.name,'/app/domains/','domain:'+d.id);res.json({...pub(d),checks:ck})}
  catch(e){if(e.code==='23505')return res.status(409).json({error:'domain_taken'});throw e}}));
 r.delete('/:id',own,w(async(req,res)=>{await q('delete from domains where id=$1',[req.d.id]);res.json({ok:true})}));
 module.exports=r;

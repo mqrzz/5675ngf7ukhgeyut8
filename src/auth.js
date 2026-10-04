@@ -8,9 +8,9 @@ async function who(req){const h=req.headers.authorization||'';
 const need=w(async(req,res,next)=>{const u=await who(req);if(!u)return res.status(401).json({error:'unauthorized'});req.user=u;next()});
 const sessionOnly=(req,res,next)=>req.user.via==='session'?next():res.status(403).json({error:'session_required'});
 const SESSION_DAYS=30;
-async function startSession(res,userId,ip){
+async function startSession(res,userId,ip,ua){
  const token=c.randomBytes(32).toString('base64url');
- await q('insert into sessions(token_hash,user_id,ip,expires_at) values($1,$2,$3,now()+interval \''+SESSION_DAYS+' days\')',[sha(token),userId,ip||null]);
+ await q('insert into sessions(token_hash,user_id,ip,ua,expires_at) values($1,$2,$3,$4,now()+interval \''+SESSION_DAYS+' days\')',[sha(token),userId,ip||null,ua?String(ua).slice(0,300):null]);
  res.cookie('gs_sid',token,{httpOnly:true,secure:true,sameSite:'lax',maxAge:SESSION_DAYS*86400000,path:'/'});
 }
 module.exports={sha,w,need,sessionOnly,startSession};

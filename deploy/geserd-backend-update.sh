@@ -1,4 +1,5 @@
 #!/bin/bash
+main(){
 set -e
 DIR=/var/www/geserd-backend
 [ "$(id -u)" = 0 ] || { echo "run as root"; exit 1; }
@@ -16,8 +17,13 @@ fi
 printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-mail-check.sh "$@"\n' > /usr/local/bin/geserd-mail-check; chmod 755 /usr/local/bin/geserd-mail-check
 printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-mail-auth-setup.sh "$@"\n' > /usr/local/bin/geserd-mail-auth-setup; chmod 755 /usr/local/bin/geserd-mail-auth-setup
 printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-smtp-setup.sh "$@"\n' > /usr/local/bin/geserd-smtp-setup; chmod 755 /usr/local/bin/geserd-smtp-setup
+printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-hostname-setup.sh "$@"\n' > /usr/local/bin/geserd-hostname-setup; chmod 755 /usr/local/bin/geserd-hostname-setup
+printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-admin.sh "$@"\n' > /usr/local/bin/geserd-admin; chmod 755 /usr/local/bin/geserd-admin
 printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-inbound-setup.sh "$@"\n' > /usr/local/bin/geserd-inbound-setup; chmod 755 /usr/local/bin/geserd-inbound-setup
 systemctl restart geserd-api
 sleep 2
 curl -fsS localhost:3001/api/health; echo
 git log --oneline -1
+}
+main "$@"
+exit $?

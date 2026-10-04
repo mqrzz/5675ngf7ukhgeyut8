@@ -51,7 +51,7 @@ r.post('/verify-code',w(async(req,res)=>{
  await q('delete from login_codes where email=$1',[email]);
  let [u]=await q('select id from users where email=$1',[email]);
  if(!u)[u]=await q('insert into users(email,country) values($1,$2) returning id',[email,countryOf(req)]);
- await startSession(res,u.id,req.ip);
+ await startSession(res,u.id,req.ip,req.headers['user-agent']);
  const [nm]=await q('select name from users where id=$1',[u.id]);
  res.json({ok:true,needs_name:!(nm&&nm.name)})
 }));
@@ -125,7 +125,7 @@ r.get('/oauth/:provider/callback',w(async(req,res)=>{
   userId=u.id;
   await q('insert into oauth_accounts(provider,provider_uid,user_id) values($1,$2,$3) on conflict do nothing',[name,prof.uid,userId]);
  }
- await startSession(res,userId,req.ip);
+ await startSession(res,userId,req.ip,req.headers['user-agent']);
  res.redirect('/app/')
 }));
 
@@ -136,7 +136,7 @@ r.post('/logout',w(async(req,res)=>{
  res.json({ok:true})
 }));
 
-r.get('/me',need,w(async(req,res)=>{const [u]=await q('select id,email,name,plan from users where id=$1',[req.user.id]);res.set('Cache-Control','no-store');res.json(u)}));
+r.get('/me',need,w(async(req,res)=>{const [u]=await q('select id,email,name,plan,lang,notify,is_admin from users where id=$1',[req.user.id]);res.set('Cache-Control','no-store');res.json(u)}));
 r.patch('/me',need,sessionOnly,w(async(req,res)=>{
  const name=String(req.body.name||'').replace(/[\u0000-\u001f]/g,' ').trim().slice(0,60);
  if(name.length<1)return res.status(400).json({error:'invalid_name'});
