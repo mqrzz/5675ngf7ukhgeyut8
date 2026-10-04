@@ -26,3 +26,5 @@ create index if not exists emails_msgid on emails(message_id);
 create table if not exists webhook_deliveries(id bigserial primary key,webhook_id uuid not null references webhooks on delete cascade,event text not null,payload jsonb not null,status text not null default 'pending',attempts int not null default 0,next_at timestamptz not null default now(),last_status int,last_error text,created_at timestamptz not null default now(),delivered_at timestamptz);
 create index if not exists whd_due on webhook_deliveries(next_at) where status='pending';
 create index if not exists whd_hook on webhook_deliveries(webhook_id,created_at desc);
+alter table emails add column if not exists spam_score numeric(5,2);
+alter table emails add column if not exists spam_rules jsonb;

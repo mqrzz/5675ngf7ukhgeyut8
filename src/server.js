@@ -1,5 +1,5 @@
 const express=require('express');const {q}=require('./db');
-const app=express();app.set('trust proxy',1);app.use(express.json({limit:'1mb'}));
+const app=express();app.set('trust proxy',1);app.use('/api/emails',express.json({limit:'15mb'}));app.use(express.json({limit:'1mb'}));
 app.get('/api/health',async(_,res)=>{try{await q('select 1');res.json({ok:true})}catch{res.status(503).json({ok:false})}});
 app.use('/api/auth',require('./routes/auth'));
 app.use('/api/api-keys',require('./routes/keys'));
@@ -9,6 +9,7 @@ app.use('/api/subdomain',require('./routes/subdomain'));
 app.use('/api/usage',require('./routes/usage'));
 app.use('/api/webhooks',require('./routes/webhooks'));
 app.use('/api/contact',require('./routes/contact'));
+app.get('/api/smtp',(_,res)=>res.json(require('./smtp').state));
 app.use('/api',(_,res)=>res.status(404).json({error:'not_found'}));
 app.use((e,_q,res,_n)=>{console.error(e);res.status(500).json({error:'server_error'})});
 const PL=require('./plans');
@@ -17,3 +18,4 @@ const port=process.env.PORT||3001;app.listen(port,'127.0.0.1',()=>console.log('g
 require('./mailevents').start();
 require('./inbound').start();
 require('./webhooks').start();
+require('./smtp').start();

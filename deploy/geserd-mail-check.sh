@@ -29,6 +29,15 @@ SPF=$(q $D | grep -i 'v=spf1'); [ -n "$SPF" ] && ok "SPF: $SPF" || bad "no SPF T
 DK=$(q mail._domainkey.$D | grep -i 'v=DKIM1'); [ -n "$DK" ] && ok "DKIM record mail._domainkey.$D exists" || bad "no DKIM record mail._domainkey.$D  -> run geserd-mail-auth-setup and add the printed records"
 DM=$(q _dmarc.$D | grep -i 'v=DMARC1'); [ -n "$DM" ] && ok "DMARC: $DM" || bad "no DMARC record _dmarc.$D"
 systemctl is-active --quiet opendkim && ok "opendkim is running" || bad "opendkim is not running -> run geserd-mail-auth-setup"
+echo "9) reverse DNS, HELO name and spam scanner"
+IPV=$(grep -m1 '^SERVER_IP=' $ENVF | cut -d= -f2-); [ -n "$IPV" ] || IPV=$(curl -4 -s --max-time 6 https://api.ipify.org)
+PTR=$(dig +short -x "$IPV" 2>/dev/null | head -1 | sed 's/\.$//'); HELO=$(postconf -h myhostname)
+echo "         IP $IPV  PTR ${PTR:-none}  Postfix HELO $HELO  mail host $MH"
+[ -n "$PTR" ] && ok "PTR exists: $PTR" || bad "no PTR record for $IPV (set it in the hosting panel)"
+[ "$PTR" = "$HELO" ] && ok "PTR matches the HELO name" || bad "PTR ($PTR) differs from HELO ($HELO): Gmail and others score this as spam"
+FIPV=$(dig +short A "$PTR" 2>/dev/null | head -1); [ "$FIPV" = "$IPV" ] && ok "PTR name resolves back to $IPV" || bad "PTR name does not resolve back to $IPV (forward-confirmed reverse DNS fails)"
+(exec 3<>/dev/tcp/127.0.0.1/783) 2>/dev/null && ok "spamd answers on 127.0.0.1:783" || bad "spamd is not running -> run geserd-smtp-setup"
+(timeout 6 bash -c 'exec 3<>/dev/tcp/gmail-smtp-in.l.google.com/25' ) 2>/dev/null && ok "outgoing port 25 is open" || bad "outgoing port 25 is blocked by the hosting provider"
 echo
 echo "Reading the result: status=sent in step 6 but no email in the inbox = the recipient rejected/spam-filtered it. Check the spam folder, then"
 echo "SPF (TXT on geserd.com), DKIM signing for geserd.com in OpenDKIM, DMARC and the PTR of the server IP. status=deferred/bounced shows the exact reason."
