@@ -9,6 +9,7 @@ app.use('/api/subdomain',require('./routes/subdomain'));
 app.use('/api/usage',require('./routes/usage'));
 app.use('/api/webhooks',require('./routes/webhooks'));
 app.use('/api/contact',require('./routes/contact'));
+app.use('/api/templates',require('./routes/templates'));
 app.use('/api/account',require('./routes/account'));
 app.use('/api/notifications',require('./routes/notifications'));
 app.use('/api/tickets',require('./routes/tickets'));

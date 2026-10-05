@@ -42,7 +42,7 @@ function make(secure,t){
     handle(sess,Buffer.concat(ch)).then(r=>cb(null,'Queued as '+r.id),e=>{
      if(e&&e.code&&MAP[e.code]){const[c,m]=MAP[e.code];return cb(err(m+(e.code==='domain_not_verified'&&e.extra.domain?' ('+e.extra.domain+')':''),c))}
      console.error('smtp handle',e&&e.message);cb(err('Temporary local problem, try again later',451))})})}});
- srv.on('error',e=>console.error('smtp submission',e.message));
+ srv.on('error',e=>{if(/Socket closed|ECONNRESET|EPIPE|ETIMEDOUT|wrong version|unknown protocol|no shared cipher|bad certificate/i.test(String(e&&e.message)))return;console.error('smtp submission',e.message)});
  return srv}
 function start(){
  if(process.env.SMTP_SUBMISSION==='off'){console.log('smtp submission: disabled');return}

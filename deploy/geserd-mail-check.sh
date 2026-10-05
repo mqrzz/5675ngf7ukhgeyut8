@@ -31,10 +31,12 @@ DM=$(q _dmarc.$D | grep -i 'v=DMARC1'); [ -n "$DM" ] && ok "DMARC: $DM" || bad "
 systemctl is-active --quiet opendkim && ok "opendkim is running" || bad "opendkim is not running -> run geserd-mail-auth-setup"
 echo "9) reverse DNS, HELO name and spam scanner"
 IPV=$(grep -m1 '^SERVER_IP=' $ENVF | cut -d= -f2-); [ -n "$IPV" ] || IPV=$(curl -4 -s --max-time 6 https://api.ipify.org)
-PTR=$(dig +short -x "$IPV" 2>/dev/null | head -1 | sed 's/\.$//'); HELO=$(postconf -h myhostname)
+PTR=$(dig +short -x "$IPV" 2>/dev/null | head -1 | sed 's/\.$//'); HELO=$(postconf -h smtp_helo_name); case "$HELO" in ""|*'$'*) HELO=$(postconf -h myhostname);; esac
 echo "         IP $IPV  PTR ${PTR:-none}  Postfix HELO $HELO  mail host $MH"
 [ -n "$PTR" ] && ok "PTR exists: $PTR" || bad "no PTR record for $IPV (set it in the hosting panel)"
 [ "$PTR" = "$HELO" ] && ok "PTR matches the HELO name" || bad "PTR ($PTR) differs from HELO ($HELO): Gmail and others score this as spam"
+HSPF=$(dig +short TXT "$HELO" @1.1.1.1 | tr -d '"' | grep -m1 '^v=spf1'); [ -n "$HSPF" ] && ok "SPF for the HELO name $HELO: $HSPF" || bad "no SPF TXT on $HELO (add: v=spf1 ip4:$IPV -all)"
+HA=$(dig +short A "$HELO" @1.1.1.1 | head -1); [ "$HA" = "$IPV" ] && ok "$HELO resolves to $IPV" || bad "$HELO does not resolve to $IPV"
 FIPV=$(dig +short A "$PTR" 2>/dev/null | head -1); [ "$FIPV" = "$IPV" ] && ok "PTR name resolves back to $IPV" || bad "PTR name does not resolve back to $IPV (forward-confirmed reverse DNS fails)"
 (exec 3<>/dev/tcp/127.0.0.1/783) 2>/dev/null && ok "spamd answers on 127.0.0.1:783" || bad "spamd is not running -> run geserd-smtp-setup"
 (timeout 6 bash -c 'exec 3<>/dev/tcp/gmail-smtp-in.l.google.com/25' ) 2>/dev/null && ok "outgoing port 25 is open" || bad "outgoing port 25 is blocked by the hosting provider"

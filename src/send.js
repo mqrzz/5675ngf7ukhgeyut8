@@ -1,6 +1,6 @@
 const c=require('crypto');const MailComposer=require('nodemailer/lib/mail-composer');
 const {q}=require('./db');const {dec}=require('./secret');const PLANS=require('./plans');
-const {transport,FROM}=require('./mailer');const {emit}=require('./events');const {toText}=require('./text');const {notify}=require('./notify');const spam=require('./spam');
+const {transport,FROM}=require('./mailer');const {emit}=require('./events');const {toText}=require('./text');const TPL=require('./template');const {notify}=require('./notify');const spam=require('./spam');
 const BASE=(process.env.BASE_DOMAIN||'geserd.com').toLowerCase();
 const MAILHOST=(process.env.MAIL_HOST||'geserd.com').replace(/^mail\./,'');
 const ADDR=/^[^\s@<>"',;]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$/i;
@@ -9,7 +9,7 @@ const BLOCKED=/\.(exe|scr|bat|cmd|com|pif|vbs|vbe|js|jse|jar|msi|lnk|ps1|reg|dll
 const HDR=new Set(['list-unsubscribe','list-unsubscribe-post','x-entity-ref-id','x-priority']);
 const MAXATT=10*1024*1024;
 const E=(code,extra)=>Object.assign(new Error(code),{code,extra:extra||{}});
-const STATUS={quota_exceeded:429,rate_limited:429,domain_not_verified:403,send_failed:502,spam_rejected:422};
+const STATUS={template_not_found:404,missing_variables:422,quota_exceeded:429,rate_limited:429,domain_not_verified:403,send_failed:502,spam_rejected:422};
 const status=code=>STATUS[code]||422;
 function parseAddr(s){s=String(s||'').trim();const m=/^"?([^"<]*?)"?\s*<([^<>]+)>$/.exec(s);const email=(m?m[2]:s).trim().toLowerCase();return{name:m?m[1].trim():'',email}}
 const arr=v=>v==null?[]:Array.isArray(v)?v:[v];
@@ -67,7 +67,18 @@ function compose(m,plan,id,mid,rcpt){
   attachments:m.attachments,messageId:mid,date:new Date(),headers:{'X-Geserd-Id':id,...m.headers}}}
 async function raw(opts){const o={...opts,bcc:undefined};if(!o.to.length&&!o.cc.length)o.to=[opts.bcc[0]];return new MailComposer(o).compile().build()}
 async function score(opts){try{return await spam.check(await raw(opts))}catch(e){console.error('spam score',e.message);return null}}
+async function applyTemplate(uid,b){
+ if(!b||b.template_id==null)return b;
+ const id=String(b.template_id);
+ if(!/^[0-9a-f-]{36}$/i.test(id))throw E('template_not_found');
+ const [t]=await q('select subject,html,text_body from templates where id=$1 and user_id=$2',[id,uid]);
+ if(!t)throw E('template_not_found');
+ const v=TPL.clean(b.variables);
+ const need=TPL.vars(t.subject,t.html,t.text_body).filter(k=>!Object.prototype.hasOwnProperty.call(v,k));
+ if(need.length)throw E('missing_variables',{variables:need});
+ return{...b,subject:b.subject!=null&&b.subject!==''?b.subject:TPL.render(t.subject,v,false),html:b.html||TPL.render(t.html,v,true)||undefined,text:b.text||TPL.render(t.text_body,v,false)||undefined}}
 async function send(uid,b,keyId){
+ b=await applyTemplate(uid,b);
  const m=normalize(b);
  if(!rate(uid))throw E('rate_limited');
  const {d,signer}=await resolve(uid,m);
@@ -98,6 +109,7 @@ async function send(uid,b,keyId){
   await emit(id,'failed',{error:String(e&&e.message||e).slice(0,500)});
   throw E('send_failed',{id})}}
 async function check(uid,b){
+ b=await applyTemplate(uid,b);
  const m=normalize({...b,to:b.to||b.cc||b.bcc||'check@example.com'});
  const [{plan}]=await q('select plan from users where id=$1',[uid]);
  const id=c.randomUUID(),opts=compose(m,plan,id,'<'+id+'@'+MAILHOST+'>',m.all);

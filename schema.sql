@@ -41,4 +41,6 @@ create table if not exists ticket_messages(id bigserial primary key,ticket_id uu
 create index if not exists ticket_messages_ticket on ticket_messages(ticket_id,id);
 create table if not exists incidents(id uuid primary key default gen_random_uuid(),title text not null,body text,component text,status text not null default 'investigating',impact text not null default 'minor',started_at timestamptz not null default now(),resolved_at timestamptz);
 create table if not exists status_days(day date not null,component text not null,checks int not null default 0,fails int not null default 0,primary key(day,component));
+create table if not exists templates(id uuid primary key default gen_random_uuid(),user_id uuid not null references users on delete cascade,name text not null,subject text not null default '',html text not null default '',text_body text not null default '',created_at timestamptz not null default now(),updated_at timestamptz not null default now());
+create index if not exists templates_user on templates(user_id,updated_at desc);
 
