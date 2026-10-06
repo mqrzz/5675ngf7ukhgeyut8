@@ -1,5 +1,5 @@
 const {SMTPServer}=require('smtp-server');const {simpleParser}=require('mailparser');const fs=require('fs');
-const {q}=require('./db');const {sha}=require('./auth');const {send}=require('./send');
+const {q}=require('./db');const {sha}=require('./auth');const {send}=require('./send');const SET=require('./settings');
 const BASE=(process.env.BASE_DOMAIN||'geserd.com').toLowerCase();
 const HOST=process.env.SMTP_HOSTNAME||'smtp.'+BASE;
 const MAX=10*1024*1024;
@@ -33,7 +33,7 @@ function make(secure,t){
    if(!pw.startsWith('gs_')||pw.length>200){note(ip);return setTimeout(()=>cb(err('Invalid username or password',535)),400)}
    q('update api_keys set last_used_at=now() where key_hash=$1 and revoked_at is null returning id,user_id',[sha(pw)]).then(r=>{
     if(!r[0]){note(ip);return setTimeout(()=>cb(err('Invalid username or password',535)),400)}
-    cb(null,{user:{id:r[0].user_id,keyId:r[0].id}})},e=>{console.error('smtp auth',e.message);cb(err('Temporary authentication failure',454))})},
+    SET.get(r[0].user_id).then(cfg=>{if(!SET.ipAllowed(cfg,ip)){note(ip);return cb(err('Sending from this address is not allowed for your account',535))}cb(null,{user:{id:r[0].user_id,keyId:r[0].id}})},()=>cb(err('Temporary authentication failure',454)))},e=>{console.error('smtp auth',e.message);cb(err('Temporary authentication failure',454))})},
   onRcptTo(a,sess,cb){if(sess.envelope.rcptTo.length>=50)return cb(err('Too many recipients',452));cb()},
   onData(stream,sess,cb){
    const ch=[];let n=0;stream.on('data',b=>{n+=b.length;if(n<=MAX)ch.push(b)});

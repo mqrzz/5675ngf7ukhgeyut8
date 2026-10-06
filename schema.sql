@@ -43,4 +43,10 @@ create table if not exists incidents(id uuid primary key default gen_random_uuid
 create table if not exists status_days(day date not null,component text not null,checks int not null default 0,fails int not null default 0,primary key(day,component));
 create table if not exists templates(id uuid primary key default gen_random_uuid(),user_id uuid not null references users on delete cascade,name text not null,subject text not null default '',html text not null default '',text_body text not null default '',created_at timestamptz not null default now(),updated_at timestamptz not null default now());
 create index if not exists templates_user on templates(user_id,updated_at desc);
+alter table users add column if not exists send_settings jsonb not null default '{}';
+alter table emails add column if not exists template_id uuid;
+create table if not exists template_versions(id bigserial primary key,template_id uuid not null references templates on delete cascade,name text not null,subject text not null,html text not null,text_body text not null,created_at timestamptz not null default now());
+create index if not exists template_versions_t on template_versions(template_id,id desc);
+create table if not exists otp_codes(id uuid primary key default gen_random_uuid(),user_id uuid not null references users on delete cascade,address text not null,code_hash text not null,salt text not null,attempts int not null default 0,expires_at timestamptz not null,consumed_at timestamptz,created_at timestamptz not null default now());
+create index if not exists otp_lookup on otp_codes(user_id,address,created_at desc);
 
