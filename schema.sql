@@ -49,4 +49,16 @@ create table if not exists template_versions(id bigserial primary key,template_i
 create index if not exists template_versions_t on template_versions(template_id,id desc);
 create table if not exists otp_codes(id uuid primary key default gen_random_uuid(),user_id uuid not null references users on delete cascade,address text not null,code_hash text not null,salt text not null,attempts int not null default 0,expires_at timestamptz not null,consumed_at timestamptz,created_at timestamptz not null default now());
 create index if not exists otp_lookup on otp_codes(user_id,address,created_at desc);
-
+alter table users add column if not exists region text;
+alter table users add column if not exists account_country text;
+alter table users add column if not exists data_region text not null default 'main';
+alter table users add column if not exists currency text not null default 'RUB';
+alter table users add column if not exists onboarded_at timestamptz;
+create index if not exists users_region on users(region);
+create sequence if not exists invoices_inv_seq start 1000 maxvalue 2147483647;
+create table if not exists invoices(id integer primary key default nextval('invoices_inv_seq'),user_id uuid not null references users on delete cascade,plan text not null,kind text not null check(kind in('initial','renewal','change')),amount numeric(12,2) not null check(amount>0),currency text not null default 'RUB',status text not null default 'pending' check(status in('pending','paid','failed','canceled','refunded')),parent_id integer references invoices,provider text not null default 'robokassa',provider_data jsonb,period_start timestamptz,period_end timestamptz,created_at timestamptz not null default now(),paid_at timestamptz);
+create index if not exists invoices_user on invoices(user_id,created_at desc);
+create table if not exists subscriptions(user_id uuid primary key references users on delete cascade,plan text not null,status text not null default 'active' check(status in('active','past_due','canceled')),recurring boolean not null default false,parent_invoice_id integer references invoices,current_period_end timestamptz,cancel_at_period_end boolean not null default false,attempts int not null default 0,next_attempt_at timestamptz,updated_at timestamptz not null default now());
+create index if not exists subscriptions_due on subscriptions(current_period_end) where status<>'canceled';
+create table if not exists payment_events(id bigserial primary key,invoice_id integer references invoices on delete cascade,kind text not null,payload jsonb,created_at timestamptz not null default now());
+create index if not exists payment_events_inv on payment_events(invoice_id,id);

@@ -3,6 +3,17 @@ const {q}=require('../db');const {w,need,sessionOnly,sha}=require('../auth');
 const LANGS=['en','ru','fr','de'],KEYS=['bounce','complaint','quota','domain','ticket'];
 r.use(need,sessionOnly);
 const cur=req=>{const m=/(?:^|; )gs_sid=([^;]+)/.exec(req.headers.cookie||'');return m?sha(m[1]):null};
+r.post('/onboarding',w(async(req,res)=>{
+ const REG=require('../regions');
+ const name=String(req.body.name||'').replace(/[\u0000-\u001f]/g,' ').trim().slice(0,60);
+ const cc=String(req.body.country||'').toUpperCase();
+ if(name.length<1)return res.status(400).json({error:'invalid_name'});
+ if(!REG.valid(cc))return res.status(400).json({error:'invalid_country'});
+ const [u]=await q('select onboarded_at from users where id=$1',[req.user.id]);
+ if(u.onboarded_at)return res.status(409).json({error:'region_locked'});
+ const p=REG.profile(cc);
+ await q('update users set name=$2,account_country=$3,region=$4,data_region=$5,currency=$6,onboarded_at=now() where id=$1',[req.user.id,name,p.country,p.region,p.data_region,p.currency]);
+ res.json({ok:true,name,...p})}));
 r.patch('/preferences',w(async(req,res)=>{
  const b=req.body||{};
  if(b.lang!==undefined){if(!LANGS.includes(b.lang))return res.status(400).json({error:'invalid_lang'});await q('update users set lang=$2 where id=$1',[req.user.id,b.lang])}

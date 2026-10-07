@@ -6,22 +6,16 @@ const {sha,w,need,sessionOnly,startSession}=require('../auth');
 const {sendCodeMail}=require('../mailer');
 const LANGS=['en','ru','fr','de'];
 
-let geoip=null;try{geoip=require('geoip-lite')}catch(e){console.warn('geoip-lite not installed - run geserd-backend-update')}
-function geoInfo(req){
- const cf=req.headers['cf-ipcountry'];
- if(cf&&cf!=='XX'&&cf!=='T1')return{country:String(cf).toUpperCase(),source:'cloudflare'};
- try{const g=geoip&&geoip.lookup(req.ip);if(g&&g.country)return{country:g.country,source:'geoip'}}catch(e){}
- return{country:null,source:geoip?'unknown-ip':'no-geoip-db'};
-}
+const GEO=require('../geo');
+function geoInfo(req){return GEO.lookup(req)}
 function countryOf(req){return geoInfo(req).country}
-function allowedProviders(country){
- if(country==='RU')return['yandex'];
- return['github','google'];
-}
+const REG=require('../regions');
+function allowedProviders(country){return REG.loginForIp(country)}
+r.get('/regions',(req,res)=>{const g=geoInfo(req);res.set('Cache-Control','no-store');res.json({detected:g.country,...REG.publicList()})});
 r.get('/geo',(req,res)=>{
  const gi=geoInfo(req),country=gi.country;res.set('Cache-Control','no-store');
  const out={country,providers:allowedProviders(country)};
- if(req.query.debug!==undefined)Object.assign(out,{source:gi.source,seen_ip:req.ip,x_forwarded_for:req.headers['x-forwarded-for']||null,cf_ipcountry:req.headers['cf-ipcountry']||null});
+ if(req.query.debug!==undefined)Object.assign(out,{source:gi.source,seen_ip:req.ip,x_forwarded_for:req.headers['x-forwarded-for']||null});
  res.json(out)});
 
 const EMAIL_RX=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -125,6 +119,8 @@ r.get('/oauth/:provider/callback',w(async(req,res)=>{
   userId=u.id;
   await q('insert into oauth_accounts(provider,provider_uid,user_id) values($1,$2,$3) on conflict do nothing',[name,prof.uid,userId]);
  }
+ const [ur]=await q('select region from users where id=$1',[userId]);
+ if(ur&&ur.region&&!REG.loginFor(ur.region).includes(name))return res.status(403).json({error:'not_available_in_region'});
  await startSession(res,userId,req.ip,req.headers['user-agent']);
  res.redirect('/app/')
 }));
@@ -136,7 +132,7 @@ r.post('/logout',w(async(req,res)=>{
  res.json({ok:true})
 }));
 
-r.get('/me',need,w(async(req,res)=>{const [u]=await q('select id,email,name,plan,lang,notify,is_admin from users where id=$1',[req.user.id]);res.set('Cache-Control','no-store');res.json(u)}));
+r.get('/me',need,w(async(req,res)=>{const [u]=await q('select id,email,name,plan,lang,notify,is_admin,region,account_country,data_region,currency,country,onboarded_at from users where id=$1',[req.user.id]);res.set('Cache-Control','no-store');const{onboarded_at,...rest}=u;res.json({...rest,onboarded:!!onboarded_at,display:REG.policy(u.region).display,login_methods:u.region?REG.policy(u.region).login:null})}));
 r.patch('/me',need,sessionOnly,w(async(req,res)=>{
  const name=String(req.body.name||'').replace(/[\u0000-\u001f]/g,' ').trim().slice(0,60);
  if(name.length<1)return res.status(400).json({error:'invalid_name'});
