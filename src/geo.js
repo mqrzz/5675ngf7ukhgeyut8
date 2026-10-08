@@ -1,7 +1,7 @@
 const cfg=require('../config/geo.json');
 let db=null;try{db=require('geoip-lite')}catch(e){console.warn('geoip-lite not installed - run geserd-backend-update')}
 const BLOCKED=new Set(cfg.blocked.map(s=>String(s).toUpperCase()));
-const EXEMPT=[/^\/api\/geo(\/|$)/,/^\/api\/health$/,/^\/api\/billing\/robokassa\/(result|success|fail)$/];
+const EXEMPT=[/^\/api\/geo(\/|$)/,/^\/api\/health$/,/^\/api\/unsubscribe\//,/^\/api\/billing\/robokassa\/(result|success|fail)$/];
 function clean(ip){return String(ip||'').replace(/^::ffff:/,'')}
 function lookup(req,forced){
  const ip=clean(forced||req.ip);

@@ -32,7 +32,7 @@ location @geo_blocked {
  rewrite ^ /unavailable/index.html break;
  add_header Cache-Control "no-store" always;
 }
-location ~ ^/(unavailable|countries|assets|css|js|i18n)(/|$) {
+location ~ ^/(unavailable|countries|unsubscribe|assets|css|js|i18n)(/|$) {
  auth_request off;
  root /var/www/geserd;
  try_files $uri $uri/index.html =404;
