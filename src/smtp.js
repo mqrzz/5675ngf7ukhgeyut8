@@ -1,3 +1,4 @@
+const APILOG=require('./apilog');
 const {SMTPServer}=require('smtp-server');const {simpleParser}=require('mailparser');const fs=require('fs');
 const {q}=require('./db');const {sha}=require('./auth');const {send}=require('./send');const SET=require('./settings');
 const BASE=(process.env.BASE_DOMAIN||'geserd.com').toLowerCase();
@@ -23,7 +24,9 @@ async function handle(sess,raw){
  const headers={};for(const k of['list-unsubscribe','list-unsubscribe-post','x-entity-ref-id','x-priority']){if(p.headers.has(k)){const v=p.headers.get(k);headers[k]=typeof v==='string'?v:(v&&v.text)||''}}
  const body={from:f?(f.name?'"'+String(f.name).replace(/["\\\r\n]/g,'')+'" <'+f.address+'>':f.address):'',to,cc,bcc,reply_to:rt,subject:p.subject||'',html:p.html||null,text:p.text||null,headers,
   attachments:(p.attachments||[]).map(a=>({filename:a.filename||'attachment',content:a.content,content_type:a.contentType,cid:a.related?a.cid:undefined}))};
- return send(sess.user.id,body,sess.user.keyId)}
+ const t0=Date.now(),info={uid:sess.user.id,keyId:sess.user.keyId,method:'SMTP',path:'submission',via:'smtp',ip:sess.remoteAddress,ua:'smtp',req:{from:body.from,to:body.to,cc:body.cc,bcc:body.bcc,subject:body.subject,attachments:body.attachments.length}};
+ try{const out=await send(sess.user.id,body,sess.user.keyId);APILOG.record({...info,status:250,ms:Date.now()-t0,res:{id:out.id}});return out}
+ catch(e){APILOG.record({...info,status:e&&(e.code==='rate_limited'||e.code==='quota_exceeded')?452:550,ms:Date.now()-t0,res:{error:(e&&e.code)||'error'}});throw e}}
 function make(secure,t){
  const srv=new SMTPServer({secure,key:t.key,cert:t.cert,name:HOST,banner:'Geserd SMTP',authMethods:['PLAIN','LOGIN'],authOptional:false,allowInsecureAuth:false,size:MAX,maxClients:30,socketTimeout:90000,closeTimeout:4000,disableReverseLookup:true,
   onAuth(auth,sess,cb){

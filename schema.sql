@@ -72,3 +72,38 @@ create index if not exists broadcasts_user on broadcasts(user_id,created_at desc
 create index if not exists broadcasts_active on broadcasts(status) where status in('scheduled','sending','paused');
 create table if not exists broadcast_recipients(broadcast_id uuid not null references broadcasts on delete cascade,contact_id uuid references contacts on delete set null,email text not null,first_name text,last_name text,status text not null default 'pending' check(status in('pending','sent','failed','skipped')),email_id uuid,error text,primary key(broadcast_id,email));
 create index if not exists broadcast_rcpt_pending on broadcast_recipients(broadcast_id) where status='pending';
+alter table events add column if not exists user_id uuid;
+update events e set user_id=m.user_id from emails m where e.email_id=m.id and e.user_id is null;
+create index if not exists events_user on events(user_id,id desc);
+create table if not exists metric_hours(user_id uuid not null references users on delete cascade,hr timestamptz not null,domain text not null,sent int not null default 0,delivered int not null default 0,bounced int not null default 0,complained int not null default 0,delayed int not null default 0,failed int not null default 0,suppressed int not null default 0,received int not null default 0,primary key(user_id,hr,domain));
+create table if not exists metric_rcpt(user_id uuid not null references users on delete cascade,day date not null,domain text not null,rdomain text not null,delivered int not null default 0,bounced int not null default 0,complained int not null default 0,primary key(user_id,day,domain,rdomain));
+create table if not exists metric_bounce(user_id uuid not null references users on delete cascade,day date not null,domain text not null,dsn text not null,n int not null default 0,primary key(user_id,day,domain,dsn));
+create table if not exists api_logs(id bigserial primary key,user_id uuid not null references users on delete cascade,key_id uuid references api_keys on delete set null,method text not null,path text not null,status int not null,ms int not null default 0,via text not null default 'key',ip text,ua text,req jsonb,res jsonb,created_at timestamptz not null default now());
+create index if not exists api_logs_user on api_logs(user_id,id desc);
+create index if not exists api_logs_time on api_logs(created_at);
+alter table broadcasts add column if not exists stats jsonb;
+do $$ begin
+if not exists(select 1 from kv where key='metrics_backfill_1') then
+ insert into metric_hours(user_id,hr,domain,sent,delivered,bounced,complained,delayed,failed,suppressed,received)
+ select m.user_id,date_trunc('hour',e.created_at at time zone 'UTC') at time zone 'UTC',
+  case when m.direction='in' then lower(split_part(coalesce(m.to_addrs->>0,''),'@',2)) else lower(split_part(m.from_addr,'@',2)) end,
+  coalesce(sum(case when e.type='sent' then greatest(coalesce(jsonb_array_length(e.data->'accepted'),1),1) end),0),
+  count(*) filter(where e.type='delivered'),count(*) filter(where e.type='bounced'),count(*) filter(where e.type='complained'),count(*) filter(where e.type='delayed'),
+  coalesce(sum(case when e.type='failed' then greatest(jsonb_array_length(m.to_addrs),1) end),0),
+  coalesce(sum(case when e.type='sent' then coalesce(jsonb_array_length(e.data->'suppressed'),0) end),0),
+  count(*) filter(where e.type='received')
+ from events e join emails m on m.id=e.email_id group by 1,2,3
+ on conflict do nothing;
+ insert into metric_rcpt(user_id,day,domain,rdomain,delivered,bounced,complained)
+ select m.user_id,(e.created_at at time zone 'UTC')::date,lower(split_part(m.from_addr,'@',2)),lower(split_part(e.data->>'recipient','@',2)),
+  count(*) filter(where e.type='delivered'),count(*) filter(where e.type='bounced'),count(*) filter(where e.type='complained')
+ from events e join emails m on m.id=e.email_id
+ where m.direction='out' and e.type in('delivered','bounced','complained') and coalesce(e.data->>'recipient','')<>'' group by 1,2,3,4
+ on conflict do nothing;
+ insert into metric_bounce(user_id,day,domain,dsn,n)
+ select m.user_id,(e.created_at at time zone 'UTC')::date,lower(split_part(m.from_addr,'@',2)),coalesce(nullif(left(e.data->>'dsn',10),''),'unknown'),count(*)
+ from events e join emails m on m.id=e.email_id where m.direction='out' and e.type='bounced' group by 1,2,3,4
+ on conflict do nothing;
+ insert into kv(key,value) values('metrics_backfill_1','1');
+end if;
+end $$;

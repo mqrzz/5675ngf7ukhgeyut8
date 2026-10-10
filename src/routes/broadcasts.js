@@ -42,6 +42,10 @@ r.post('/',w(async(req,res)=>{
   res.status(201).json(view(b))
  }catch(e){fail(res,e)}
 }));
+r.get('/:id/stats',w(async(req,res)=>{
+ const b=await mine(req.user.id,req.params.id);if(!b)return res.status(404).json({error:'not_found'});
+ res.set('Cache-Control','no-store');res.json(await require('../bstats').get(b))
+}));
 r.get('/:id',w(async(req,res)=>{
  const b=await mine(req.user.id,req.params.id);if(!b)return res.status(404).json({error:'not_found'});
  const errs=await q("select email,error from broadcast_recipients where broadcast_id=$1 and status='failed' order by email limit 20",[b.id]);

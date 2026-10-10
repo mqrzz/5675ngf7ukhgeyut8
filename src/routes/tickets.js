@@ -1,6 +1,6 @@
 const r=require('express').Router();
 const {q}=require('../db');const {w,need,sessionOnly}=require('../auth');
-const TOPICS=['general','billing','deliverability','domains','api','abuse','other'];
+const TOPICS=['general','billing','deliverability','domains','api','abuse','feedback','other'];
 const ID=/^[0-9a-f-]{36}$/i;
 r.use(need,sessionOnly);
 const clean=(s,n)=>String(s==null?'':s).replace(/\u0000/g,'').trim().slice(0,n);
@@ -34,5 +34,5 @@ r.post('/:id/messages',own,w(async(req,res)=>{
  await q("update tickets set updated_at=now(),status='open' where id=$1",[req.t.id]);
  res.status(201).json(m)}));
 r.post('/:id/close',own,w(async(req,res)=>{await q("update tickets set status='closed',updated_at=now() where id=$1",[req.t.id]);res.json({ok:true})}));
-r.post('/:id/reopen',own,w(async(req,res)=>{await q("update tickets set status='open',updated_at=now() where id=$1",[req.t.id]);res.json({ok:true})}));
+r.post('/:id/reopen',own,w(async(req,res)=>res.status(409).json({error:'ticket_closed'})));
 module.exports=r;
