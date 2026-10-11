@@ -3,16 +3,17 @@ const {notify}=require('../notify');
 const provider=require('./robokassa');
 const ORDER={free:0,pro:1,business:2,enterprise:3};
 const DAY=86400000;
-function price(plan){const p=P.plans[plan];return p?p.amount:null}
+const SIB=require('../../config/siberia.json');
+function price(plan,tariff){const p=P.plans[plan];if(!p)return null;return tariff==='siberia'?Math.round(p.amount*(1-SIB.discount)*100)/100:p.amount}
 function title(plan,kind){return'Geserd '+plan.charAt(0).toUpperCase()+plan.slice(1)+(kind==='renewal'?' (renewal)':' (30 days)')}
 async function subOf(uid){const[s]=await q('select * from subscriptions where user_id=$1',[uid]);return s||null}
 function credit(user,sub,fromPlan){
  if(!sub||!sub.current_period_end||ORDER[fromPlan]<=0)return 0;
  const left=Math.max(0,new Date(sub.current_period_end).getTime()-Date.now());
- return Math.floor(price(fromPlan)*Math.min(1,left/(P.period_days*DAY)))
+ return Math.floor(price(fromPlan,user.tariff)*Math.min(1,left/(P.period_days*DAY)))
 }
 async function quote(uid,plan){
- const[u]=await q('select plan,onboarded_at,email,lang from users where id=$1',[uid]);
+ const[u]=await q('select plan,tariff,onboarded_at,email,lang from users where id=$1',[uid]);
  if(!u)throw Object.assign(new Error('no_user'),{code:'no_user'});
  if(!u.onboarded_at)throw Object.assign(new Error('onboarding_required'),{code:'onboarding_required'});
  if(price(plan)==null)throw Object.assign(new Error('invalid_plan'),{code:'invalid_plan'});
@@ -21,7 +22,7 @@ async function quote(uid,plan){
  if(active&&ORDER[plan]<ORDER[u.plan])throw Object.assign(new Error('downgrade_at_period_end'),{code:'downgrade_at_period_end'});
  const cr=active&&u.plan!==plan?credit(u,sub,u.plan):0;
  const same=active&&u.plan===plan;
- const amount=Math.max(10,price(plan)-cr);
+ const amount=Math.max(10,price(plan,u.tariff)-cr);
  return{user:u,sub,amount,credit:cr,kind:same?'renewal':(active?'change':'initial'),plan}
 }
 async function checkout(uid,plan,recurring,culture){
@@ -67,7 +68,8 @@ async function resume(uid){
 }
 async function failInvoice(id,why){await q("update invoices set status='failed',provider_data=coalesce(provider_data,'{}'::jsonb)||$2::jsonb where id=$1 and status='pending'",[id,JSON.stringify({error:why})])}
 async function renewOne(s){
- const[inv]=await q("insert into invoices(user_id,plan,kind,amount,currency,provider,parent_id) values($1,$2,'renewal',$3,$4,'robokassa',$5) returning *",[s.user_id,s.plan,price(s.plan),P.currency,s.parent_invoice_id]);
+ const[tu]=await q('select tariff from users where id=$1',[s.user_id]);
+ const[inv]=await q("insert into invoices(user_id,plan,kind,amount,currency,provider,parent_id) values($1,$2,'renewal',$3,$4,'robokassa',$5) returning *",[s.user_id,s.plan,price(s.plan,tu&&tu.tariff),P.currency,s.parent_invoice_id]);
  let r;try{r=await provider.charge(inv,s.parent_invoice_id,title(s.plan,'renewal'))}catch(e){r={ok:false,text:e.message}}
  if(r.ok)return true;
  await failInvoice(inv.id,r.text);

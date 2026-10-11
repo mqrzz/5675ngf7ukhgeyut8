@@ -3,7 +3,7 @@ const ADDR=/^[^\s@<>"',;]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$/i;
 const UUID=/^[0-9a-f-]{36}$/i;
 const clip=(v,n)=>v==null||v===''?null:String(v).replace(/[\u0000-\u001f]/g,' ').trim().slice(0,n)||null;
 r.use(need);
-async function limits(uid){const[u]=await q('select plan from users where id=$1',[uid]);return PLANS[u.plan]||PLANS.free}
+async function limits(uid){const[u]=await q('select eff_plan(plan,tariff) plan from users where id=$1',[uid]);return PLANS[u.plan]||PLANS.free}
 async function mine(uid,id){if(!UUID.test(String(id)))return null;const[a]=await q('select * from audiences where id=$1 and user_id=$2',[id,uid]);return a||null}
 function csv(text){
  const rows=[];let row=[],cur='',inq=false,sep=null;text=String(text||'').replace(/^\uFEFF/,'');

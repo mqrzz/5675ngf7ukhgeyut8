@@ -3,6 +3,7 @@ const {q}=require('../db');const {w,need,sessionOnly,sha}=require('../auth');
 const LANGS=['en','ru','fr','de'],KEYS=['bounce','complaint','quota','domain','ticket'];
 r.use(need,sessionOnly);
 const cur=req=>{const m=/(?:^|; )gs_sid=([^;]+)/.exec(req.headers.cookie||'');return m?sha(m[1]):null};
+r.get('/rating',w(async(req,res)=>{res.set('Cache-Control','no-store');res.json(await require('../rating').compute(req.user.id))}));
 r.post('/onboarding',w(async(req,res)=>{
  const REG=require('../regions');
  const name=String(req.body.name||'').replace(/[\u0000-\u001f]/g,' ').trim().slice(0,60);

@@ -24,7 +24,7 @@ r.get('/robokassa/fail',w(async(req,res)=>{
 r.use(need,sessionOnly);
 r.get('/',w(async(req,res)=>{
  const uid=req.user.id;
- const[u]=await q('select plan,region,currency,data_region,onboarded_at from users where id=$1',[uid]);
+ const[u]=await q('select plan,tariff,region,currency,data_region,onboarded_at from users where id=$1',[uid]);
  const sub=await B.subOf(uid);
  const inv=await q("select id,plan,kind,amount,currency,status,created_at,paid_at,period_start,period_end from invoices where user_id=$1 and (status<>'pending' or created_at>now()-interval '1 day') order by created_at desc limit 30",[uid]);
  const pol=u.region?REG.policy(u.region):null;
@@ -33,7 +33,7 @@ r.get('/',w(async(req,res)=>{
   plan:u.plan,onboarded:!!u.onboarded_at,region:u.region,currency:B.config.currency,display:pol?pol.display:null,data_region:u.data_region,
   provider:{name:PROV.name,configured:PROV.configured(),test:PROV.env().test},
   subscription:sub&&{plan:sub.plan,status:sub.status,recurring:sub.recurring,cancel_at_period_end:sub.cancel_at_period_end,current_period_end:sub.current_period_end,attempts:sub.attempts,next_attempt_at:sub.next_attempt_at},
-  prices:Object.fromEntries(Object.entries(B.config.plans).map(([k,v])=>[k,v.amount])),period_days:B.config.period_days,invoices:inv})
+  tariff:u.tariff,prices:Object.fromEntries(Object.entries(B.config.plans).map(([k,v])=>[k,B.price(k,u.tariff)])),period_days:B.config.period_days,invoices:inv})
 }));
 r.post('/quote',w(async(req,res)=>{
  try{const qt=await B.quote(req.user.id,String(req.body.plan||''));res.json({plan:qt.plan,kind:qt.kind,amount:qt.amount,credit:qt.credit,currency:B.config.currency})}

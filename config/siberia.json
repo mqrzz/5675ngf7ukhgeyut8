@@ -1,0 +1,59 @@
+{
+ "discount": 0.5,
+ "free_multiplier": 3,
+ "regions": [
+  {
+   "id": "altai_republic",
+   "code": "04"
+  },
+  {
+   "id": "altai_krai",
+   "code": "22"
+  },
+  {
+   "id": "tuva",
+   "code": "17"
+  },
+  {
+   "id": "khakassia",
+   "code": "19"
+  },
+  {
+   "id": "krasnoyarsk",
+   "code": "24"
+  },
+  {
+   "id": "irkutsk",
+   "code": "38"
+  },
+  {
+   "id": "kemerovo",
+   "code": "42"
+  },
+  {
+   "id": "novosibirsk",
+   "code": "54"
+  },
+  {
+   "id": "omsk",
+   "code": "55"
+  },
+  {
+   "id": "tomsk",
+   "code": "70"
+  }
+ ],
+ "kinds": [
+  "company",
+  "sole_proprietor",
+  "self_employed"
+ ],
+ "limits": {
+  "purpose_min": 30,
+  "purpose_max": 1000,
+  "name_min": 2,
+  "name_max": 200,
+  "site_max": 200,
+  "phone_max": 32
+ }
+}

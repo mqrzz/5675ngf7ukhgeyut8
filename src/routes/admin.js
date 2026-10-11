@@ -23,6 +23,25 @@ r.post('/tickets/:id/reply',w(async(req,res)=>{
  await notify(t.user_id,'ticket','ticket_reply',t.subject,'/app/help/?t='+t.id);
  try{await transport.sendMail({from:{name:'Geserd',address:FROM},to:t.email,subject:SUBJ[t.lang]||SUBJ.en,text:body+'\n\n'+APP+'/app/help/?t='+t.id,headers:{'Auto-Submitted':'auto-generated'}})}catch(e){console.error('ticket mail',e.message)}
  res.json({ok:true})}));
+r.get('/siberia',w(async(req,res)=>{
+ const st=['pending','approved','rejected','revoked'].includes(req.query.status)?req.query.status:null;
+ const rows=await q("select a.*,u.name,u.tariff from siberia_applications a left join users u on u.id=a.user_id "+(st?"where a.status=$1 ":"")+"order by (a.status='pending') desc,a.created_at desc limit 200",st?[st]:[]);
+ res.json(rows)}));
+r.patch('/siberia/:id',w(async(req,res)=>{
+ if(!ID.test(req.params.id))return res.status(404).json({error:'not_found'});
+ const st=String(req.body.status||''),note=String(req.body.note||'').trim().slice(0,500)||null;
+ if(!['approved','rejected','revoked'].includes(st))return res.status(400).json({error:'invalid_status'});
+ const[a]=await q('select * from siberia_applications where id=$1',[req.params.id]);
+ if(!a)return res.status(404).json({error:'not_found'});
+ const ok=(a.status==='pending'&&(st==='approved'||st==='rejected'))||(a.status==='approved'&&st==='revoked');
+ if(!ok)return res.status(409).json({error:'bad_transition'});
+ await q('update siberia_applications set status=$2,note=$3,reviewer=$4,reviewed_at=now() where id=$1',[a.id,st,note,req.user.id]);
+ let uid=a.user_id;
+ if(st==='approved'){const[u]=await q("update users set tariff='siberia' where lower(email)=lower($1) returning id",[a.email]);if(u){uid=u.id;await q('update siberia_applications set user_id=$2 where id=$1',[a.id,u.id])}}
+ if(st==='revoked')await q("update users set tariff='standard' where lower(email)=lower($1)",[a.email]);
+ if(uid)await notify(uid,'billing','siberia_'+st,note,'/app/settings/billing/','siberia:'+a.id+':'+st);
+ require('../siberiamail').send(a,st,note);
+ res.json({ok:true,status:st,attached:!!uid})}));
 r.get('/incidents',w(async(req,res)=>res.json(await q('select * from incidents order by started_at desc limit 100'))));
 r.post('/incidents',w(async(req,res)=>{
  const b=req.body||{},title=String(b.title||'').trim().slice(0,160);if(!title)return res.status(400).json({error:'invalid_title'});

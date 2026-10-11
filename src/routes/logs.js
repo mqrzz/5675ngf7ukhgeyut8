@@ -5,7 +5,7 @@ const TYPES=['sent','delivered','delayed','bounced','complained','failed','recei
 const METHODS=['GET','POST','PATCH','PUT','DELETE','SMTP'];
 const like=s=>'%'+String(s).replace(/[\\%_]/g,'\\$&')+'%';
 async function window_(uid,days){
- const[u]=await q('select plan from users where id=$1',[uid]);const max=(PLANS[u.plan]||PLANS.free).logDays;
+ const[u]=await q('select eff_plan(plan,tariff) plan from users where id=$1',[uid]);const max=(PLANS[u.plan]||PLANS.free).logDays;
  let d=parseInt(days,10);if(!(d>0))d=max;d=Math.min(d,max);
  return{days:d,max,since:new Date(Date.now()-d*86400000).toISOString()}
 }

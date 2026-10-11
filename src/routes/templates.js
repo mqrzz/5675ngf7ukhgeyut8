@@ -17,7 +17,7 @@ r.post('/',w(async(req,res)=>{
  if(!name)return res.status(400).json({error:'invalid_name'});
  const html=clip(b.html,MAXH+1),text=clip(b.text,MAXT+1);
  if(html.length>MAXH||text.length>MAXT)return res.status(413).json({error:'template_too_large'});
- const [{plan}]=await q('select plan from users where id=$1',[req.user.id]);
+ const [{plan}]=await q('select eff_plan(plan,tariff) plan from users where id=$1',[req.user.id]);
  const [{n}]=await q('select count(*)::int n from templates where user_id=$1',[req.user.id]);
  if(n>=(PLANS[plan]||PLANS.free).templates)return res.status(403).json({error:'plan_limit'});
  const [t]=await q('insert into templates(user_id,name,subject,html,text_body) values($1,$2,$3,$4,$5) returning *',[req.user.id,name,clip(b.subject,300),html,text]);
@@ -43,7 +43,7 @@ r.get('/:id/versions/:vid',own,w(async(req,res)=>{
  if(!v)return res.status(404).json({error:'not_found'});
  res.json({id:v.id,name:v.name,subject:v.subject,html:v.html,text:v.text_body,created_at:v.created_at})}));
 r.post('/:id/duplicate',own,w(async(req,res)=>{
- const [{plan}]=await q('select plan from users where id=$1',[req.user.id]);
+ const [{plan}]=await q('select eff_plan(plan,tariff) plan from users where id=$1',[req.user.id]);
  const [{n}]=await q('select count(*)::int n from templates where user_id=$1',[req.user.id]);
  if(n>=(PLANS[plan]||PLANS.free).templates)return res.status(403).json({error:'plan_limit'});
  const [t]=await q('insert into templates(user_id,name,subject,html,text_body) values($1,$2,$3,$4,$5) returning *',[req.user.id,clip(req.t.name+' copy',80),req.t.subject,req.t.html,req.t.text_body]);

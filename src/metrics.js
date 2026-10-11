@@ -69,9 +69,9 @@ async function report(uid,plan,days,domain,now){
 async function prune(){
  for(const[p,v]of Object.entries(PLANS)){
   const a=[p,String(v.metricDays)];
-  await q("delete from metric_hours m using users u where m.user_id=u.id and u.plan=$1 and m.hr<now()-($2||' days')::interval",a);
-  await q("delete from metric_rcpt m using users u where m.user_id=u.id and u.plan=$1 and m.day<(now()-($2||' days')::interval)::date",a);
-  await q("delete from metric_bounce m using users u where m.user_id=u.id and u.plan=$1 and m.day<(now()-($2||' days')::interval)::date",a)
+  await q("delete from metric_hours m using users u where m.user_id=u.id and eff_plan(u.plan,u.tariff)=$1 and m.hr<now()-($2||' days')::interval",a);
+  await q("delete from metric_rcpt m using users u where m.user_id=u.id and eff_plan(u.plan,u.tariff)=$1 and m.day<(now()-($2||' days')::interval)::date",a);
+  await q("delete from metric_bounce m using users u where m.user_id=u.id and eff_plan(u.plan,u.tariff)=$1 and m.day<(now()-($2||' days')::interval)::date",a)
  }
 }
 module.exports={bump,report,prune,dom,windowOf,rates,health,score,RANGES};

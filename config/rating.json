@@ -1,0 +1,15 @@
+{
+ "factors": {
+  "deliverability": {"max": 45, "min_sends": 20, "pending_share": 0.6, "days": 30},
+  "domain": {"max": 15, "subdomain_share": 0.5},
+  "history": {"max": 15, "full_days": 60},
+  "conduct": {"max": 15, "complaint_full": 0.1, "complaint_zero": 0.5, "unsub_full": 1, "unsub_zero": 5, "broadcasts": 5},
+  "profile": {"max": 10}
+ },
+ "levels": [
+  {"id": "excellent", "min": 90},
+  {"id": "good", "min": 75},
+  {"id": "fair", "min": 50},
+  {"id": "low", "min": 0}
+ ]
+}

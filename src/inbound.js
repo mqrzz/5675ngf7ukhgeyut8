@@ -14,7 +14,7 @@ async function store(sess,raw){
  for(const r of sess.envelope.rcptTo){const a=r.address.toLowerCase(),d=a.split('@')[1],o=await owner(d);if(!o)continue;const k=o.user_id;if(!by.has(k))by.set(k,[]);by.get(k).push(a)}
  const ids=[];let over=false;
  for(const [uid,addrs] of by){
-  const [{plan}]=await q('select plan from users where id=$1',[uid]);const P=PLANS[plan]||PLANS.free;
+  const [{plan}]=await q('select eff_plan(plan,tariff) plan from users where id=$1',[uid]);const P=PLANS[plan]||PLANS.free;
   if(P.inbound){const [{n}]=await q("select count(*)::int n from emails where user_id=$1 and direction='in' and created_at>=date_trunc('month',now())",[uid]);if(n>=P.inbound){over=true;continue}}
   const id=c.randomUUID(),att=(p.attachments||[]).map(a=>({filename:a.filename||null,content_type:a.contentType,size:a.size}));
   const hd={};for(const k of['reply-to','list-id','auto-submitted','x-mailer'])if(p.headers.has(k)){const v=p.headers.get(k);hd[k]=typeof v==='string'?v:(v&&v.text)||''}

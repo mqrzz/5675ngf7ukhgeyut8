@@ -23,7 +23,7 @@ async function get(b){
 }
 async function snapshot(){
  for(const[p,v]of Object.entries(PLANS)){
-  const rows=await q("select b.* from broadcasts b join users u on u.id=b.user_id where u.plan=$1 and b.sent>0 and coalesce(b.started_at,b.created_at)>now()-($2||' days')::interval limit 200",[p,String(v.logDays+2)]);
+  const rows=await q("select b.* from broadcasts b join users u on u.id=b.user_id where eff_plan(u.plan,u.tariff)=$1 and b.sent>0 and coalesce(b.started_at,b.created_at)>now()-($2||' days')::interval limit 200",[p,String(v.logDays+2)]);
   for(const b of rows)try{await get(b)}catch(e){console.error('bstats',e.message)}
  }
 }

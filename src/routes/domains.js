@@ -13,7 +13,7 @@ const pub=d=>({id:d.id,name:d.name,status:d.status,sending_ok:d.sending_ok,recei
 r.use(need);
 r.get('/',w(async(req,res)=>res.json((await q('select * from domains where user_id=$1 order by created_at desc',[req.user.id])).map(pub))));
 r.post('/',w(async(req,res)=>{const name=String(req.body.name||'').trim().toLowerCase();if(!RX.test(name))return res.status(400).json({error:'invalid_domain'});
- const [u]=await q('select plan from users where id=$1',[req.user.id]);const n=(await q('select count(*)::int n from domains where user_id=$1',[req.user.id]))[0].n;
+ const [u]=await q('select eff_plan(plan,tariff) plan from users where id=$1',[req.user.id]);const n=(await q('select count(*)::int n from domains where user_id=$1',[req.user.id]))[0].n;
  if(n>=(PLANS[u.plan]||PLANS.free).domains)return res.status(403).json({error:'plan_limit'});
  if((await q('select 1 from domains where name=$1 and user_id=$2',[name,req.user.id])).length)return res.status(409).json({error:'exists'});
  const {publicKey,privateKey}=c.generateKeyPairSync('rsa',{modulusLength:2048});

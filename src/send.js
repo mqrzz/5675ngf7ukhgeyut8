@@ -60,7 +60,7 @@ async function resolve(uid,m){
  if(!ok)throw E('domain_not_verified',{domain:dom});
  return{d,signer}}
 function compose(m,plan,id,mid,rcpt){
- const free=plan==='free';let H=m.html,T=m.text!=null?m.text:(m.html?toText(m.html):null);
+ const free=plan==='free'||plan==='free_sib';let H=m.html,T=m.text!=null?m.text:(m.html?toText(m.html):null);
  if(free){if(H)H=/<\/body>/i.test(H)?H.replace(/<\/body>/i,FOOT_HTML+'</body>'):H+FOOT_HTML;T=(T||'')+FOOT_TXT}
  const keep=a=>a.filter(x=>rcpt.includes(x));
  return{from:{name:m.from.name,address:m.from.email},to:keep(m.to),cc:keep(m.cc),bcc:keep(m.bcc),replyTo:m.reply||undefined,subject:m.subject,html:H||undefined,text:T||undefined,
@@ -86,7 +86,7 @@ async function send(uid,b,keyId){
  if(!m.reply&&cfg.default_reply_to)m.reply=cfg.default_reply_to;
  if(!rate(uid))throw E('rate_limited');
  const {d,signer}=await resolve(uid,m);
- const [{plan}]=await q('select plan from users where id=$1',[uid]);const P=PLANS[plan]||PLANS.free;
+ const [{plan}]=await q('select eff_plan(plan,tariff) plan from users where id=$1',[uid]);const P=PLANS[plan]||PLANS.free;
  const [u]=await q("select coalesce(sum(jsonb_array_length(to_addrs)) filter(where created_at>=date_trunc('month',now())),0)::int m,coalesce(sum(jsonb_array_length(to_addrs)) filter(where created_at>=date_trunc('day',now())),0)::int d from emails where user_id=$1 and direction='out' and status<>'rejected'",[uid]);
  if(P.daily&&u.d+m.all.length>P.daily)throw E('quota_exceeded',{scope:'daily',limit:P.daily,used:u.d});
  if(P.monthly&&u.m+m.all.length>P.monthly)throw E('quota_exceeded',{scope:'monthly',limit:P.monthly,used:u.m});
@@ -115,7 +115,7 @@ async function send(uid,b,keyId){
 async function check(uid,b){
  b=await applyTemplate(uid,b);
  const m=normalize({...b,to:b.to||b.cc||b.bcc||'check@example.com'});
- const [{plan}]=await q('select plan from users where id=$1',[uid]);
+ const [{plan}]=await q('select eff_plan(plan,tariff) plan from users where id=$1',[uid]);
  const id=c.randomUUID(),opts=compose(m,plan,id,'<'+id+'@'+MAILHOST+'>',m.all);
  const dom=m.from.email.split('@')[1];
  const [d]=await q("select status,sending_ok from domains where user_id=$1 and name=$2 order by (status='verified') desc limit 1",[uid,dom]);

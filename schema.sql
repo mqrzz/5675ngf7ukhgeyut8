@@ -107,3 +107,16 @@ if not exists(select 1 from kv where key='metrics_backfill_1') then
  insert into kv(key,value) values('metrics_backfill_1','1');
 end if;
 end $$;
+alter table users add column if not exists rating_adjust int not null default 0;
+alter table users add column if not exists tariff text not null default 'standard';
+create or replace function eff_plan(p text,t text) returns text as $$ select case when t='siberia' and p='free' then 'free_sib' else p end $$ language sql immutable;
+create table if not exists siberia_applications(id uuid primary key default gen_random_uuid(),user_id uuid not null references users on delete cascade,status text not null default 'pending',kind text not null,org_name text not null,inn text not null,region text not null,site text,phone text,purpose text not null,note text,reviewer uuid,created_at timestamptz not null default now(),reviewed_at timestamptz);
+create index if not exists siberia_user on siberia_applications(user_id,created_at desc);
+create index if not exists siberia_status on siberia_applications(status,created_at);
+create unique index if not exists siberia_one_pending on siberia_applications(user_id) where status='pending';
+alter table siberia_applications alter column user_id drop not null;
+alter table siberia_applications add column if not exists email text;
+alter table siberia_applications add column if not exists lang text not null default 'en';
+drop index if exists siberia_one_pending;
+create unique index if not exists siberia_one_pending_email on siberia_applications(lower(email)) where status='pending';
+create index if not exists siberia_email on siberia_applications(lower(email));

@@ -44,7 +44,7 @@ r.post('/verify-code',w(async(req,res)=>{
  if(row.code_hash!==sha(code)){await q('update login_codes set attempts=attempts+1 where email=$1',[email]);return res.status(400).json({error:'wrong_code'})}
  await q('delete from login_codes where email=$1',[email]);
  let [u]=await q('select id from users where email=$1',[email]);
- if(!u)[u]=await q('insert into users(email,country) values($1,$2) returning id',[email,countryOf(req)]);
+ if(!u){[u]=await q('insert into users(email,country) values($1,$2) returning id',[email,countryOf(req)]);await require('../siberia').attach(u.id,email).catch(()=>{})}
  await startSession(res,u.id,req.ip,req.headers['user-agent']);
  const [nm]=await q('select name from users where id=$1',[u.id]);
  res.json({ok:true,needs_name:!(nm&&nm.name)})
@@ -115,7 +115,7 @@ r.get('/oauth/:provider/callback',w(async(req,res)=>{
  if(acc){userId=acc.user_id}
  else{
   let [u]=await q('select id from users where email=$1',[prof.email]);
-  if(!u)[u]=await q('insert into users(email,name,country) values($1,$2,$3) returning id',[prof.email,prof.name||null,country]);
+  if(!u){[u]=await q('insert into users(email,name,country) values($1,$2,$3) returning id',[prof.email,prof.name||null,country]);await require('../siberia').attach(u.id,prof.email).catch(()=>{})}
   userId=u.id;
   await q('insert into oauth_accounts(provider,provider_uid,user_id) values($1,$2,$3) on conflict do nothing',[name,prof.uid,userId]);
  }

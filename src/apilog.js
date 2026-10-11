@@ -40,6 +40,6 @@ function attach(req,res){
  })
 }
 async function prune(){
- for(const[p,v]of Object.entries(PLANS))await q("delete from api_logs l using users u where l.user_id=u.id and u.plan=$1 and l.created_at<now()-($2||' days')::interval",[p,String(v.logDays)])
+ for(const[p,v]of Object.entries(PLANS))await q("delete from api_logs l using users u where l.user_id=u.id and eff_plan(u.plan,u.tariff)=$1 and l.created_at<now()-($2||' days')::interval",[p,String(v.logDays)])
 }
 module.exports={attach,record,prune,clean,pack};

@@ -12,7 +12,7 @@ r.post('/',w(async(req,res)=>{
  const url=String(req.body.url||'').trim();const ev=cleanEvents(req.body.events);
  if(ev===null)return res.status(400).json({error:'invalid_events'});
  if(url.length>2000||!/^https?:\/\//i.test(url)||!(await safeTarget(url)))return res.status(400).json({error:'invalid_url'});
- const [{plan}]=await q('select plan from users where id=$1',[req.user.id]);
+ const [{plan}]=await q('select eff_plan(plan,tariff) plan from users where id=$1',[req.user.id]);
  const n=(await q('select count(*)::int n from webhooks where user_id=$1',[req.user.id]))[0].n;if(n>=(PLANS[plan]||PLANS.free).webhooks)return res.status(403).json({error:'plan_limit'});
  const secret='whsec_'+c.randomBytes(24).toString('base64url');
  const [h]=await q('insert into webhooks(user_id,url,secret,events) values($1,$2,$3,$4) returning *',[req.user.id,url,secret,ev]);
