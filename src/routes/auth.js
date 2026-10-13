@@ -1,7 +1,7 @@
 const r=require('express').Router();
 const c=require('crypto');
 const {q}=require('../db');
-const {sha,w,need,sessionOnly,startSession}=require('../auth');
+const {sha,w,need,sessionOnly,allowBlocked,startSession}=require('../auth');
 
 const {sendCodeMail}=require('../mailer');
 const LANGS=['en','ru','fr','de'];
@@ -46,6 +46,7 @@ r.post('/verify-code',w(async(req,res)=>{
  let [u]=await q('select id from users where email=$1',[email]);
  if(!u){[u]=await q('insert into users(email,country) values($1,$2) returning id',[email,countryOf(req)]);await require('../siberia').attach(u.id,email).catch(()=>{})}
  await startSession(res,u.id,req.ip,req.headers['user-agent']);
+ require('../multiacct').check(u.id,req).catch(e=>console.error('multiacct',e.message));
  const [nm]=await q('select name from users where id=$1',[u.id]);
  res.json({ok:true,needs_name:!(nm&&nm.name)})
 }));
@@ -122,6 +123,7 @@ r.get('/oauth/:provider/callback',w(async(req,res)=>{
  const [ur]=await q('select region from users where id=$1',[userId]);
  if(ur&&ur.region&&!REG.loginFor(ur.region).includes(name))return res.status(403).json({error:'not_available_in_region'});
  await startSession(res,userId,req.ip,req.headers['user-agent']);
+ require('../multiacct').check(userId,req).catch(e=>console.error('multiacct',e.message));
  res.redirect('/app/')
 }));
 
@@ -132,7 +134,7 @@ r.post('/logout',w(async(req,res)=>{
  res.json({ok:true})
 }));
 
-r.get('/me',need,w(async(req,res)=>{const [u]=await q('select id,email,name,plan,lang,notify,is_admin,region,account_country,data_region,currency,country,onboarded_at from users where id=$1',[req.user.id]);res.set('Cache-Control','no-store');const{onboarded_at,...rest}=u;res.json({...rest,onboarded:!!onboarded_at,display:REG.policy(u.region).display,login_methods:u.region?REG.policy(u.region).login:null})}));
+r.get('/me',allowBlocked,need,w(async(req,res)=>{const [u]=await q('select id,email,name,plan,lang,notify,is_admin,status,region,account_country,data_region,currency,country,onboarded_at from users where id=$1',[req.user.id]);res.set('Cache-Control','no-store');const{onboarded_at,...rest}=u;res.json({...rest,onboarded:!!onboarded_at,display:REG.policy(u.region).display,login_methods:u.region?REG.policy(u.region).login:null})}));
 r.patch('/me',need,sessionOnly,w(async(req,res)=>{
  const name=String(req.body.name||'').replace(/[\u0000-\u001f]/g,' ').trim().slice(0,60);
  if(name.length<1)return res.status(400).json({error:'invalid_name'});

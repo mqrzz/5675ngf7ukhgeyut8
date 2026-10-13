@@ -63,9 +63,9 @@ let busy=false;
 async function tick(){
  if(busy)return;busy=true;
  try{
-  const due=await q("select * from broadcasts where (status='scheduled' and scheduled_at<=now()) or (status='paused' and resume_at<=now())");
+  const due=await q("select b.* from broadcasts b join users u on u.id=b.user_id and u.status='active' where (b.status='scheduled' and b.scheduled_at<=now()) or (b.status='paused' and b.resume_at<=now())");
   for(const b of due){if(b.status==='scheduled')await start(b);else await q("update broadcasts set status='sending',resume_at=null,error=null where id=$1",[b.id])}
-  const act=await q("select * from broadcasts where status='sending' order by started_at");
+  const act=await q("select b.* from broadcasts b join users u on u.id=b.user_id and u.status='active' where b.status='sending' order by b.started_at");
   for(const b of act)await runOne(b)
  }finally{busy=false}
 }

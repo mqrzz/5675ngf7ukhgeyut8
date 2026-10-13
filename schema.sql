@@ -120,3 +120,15 @@ alter table siberia_applications add column if not exists lang text not null def
 drop index if exists siberia_one_pending;
 create unique index if not exists siberia_one_pending_email on siberia_applications(lower(email)) where status='pending';
 create index if not exists siberia_email on siberia_applications(lower(email));
+alter table users add column if not exists status text not null default 'active';
+alter table users add column if not exists status_reason text;
+alter table users add column if not exists status_at timestamptz;
+alter table users add column if not exists email_norm text generated always as (case when split_part(lower(email),'@',2) in ('gmail.com','googlemail.com') then replace(split_part(split_part(lower(email),'@',1),'+',1),'.','')||'@gmail.com' else split_part(split_part(lower(email),'@',1),'+',1)||'@'||split_part(lower(email),'@',2) end) stored;
+create index if not exists users_email_norm on users(email_norm);
+create index if not exists users_status on users(status) where status<>'active';
+create table if not exists admin_actions(id bigserial primary key,admin_id uuid references users on delete set null,user_id uuid references users on delete cascade,action text not null,details jsonb not null default '{}',created_at timestamptz not null default now());
+create index if not exists admin_actions_user on admin_actions(user_id,id desc);
+create table if not exists risk_flags(id bigserial primary key,user_id uuid not null references users on delete cascade,related_id uuid references users on delete cascade,kind text not null,score int not null,details jsonb not null default '{}',status text not null default 'open',auto_action text,decision text,created_at timestamptz not null default now(),updated_at timestamptz not null default now(),reviewed_by uuid references users on delete set null,reviewed_at timestamptz);
+create unique index if not exists risk_open_pair on risk_flags(user_id,coalesce(related_id,'00000000-0000-0000-0000-000000000000'::uuid),kind) where status='open';
+create index if not exists risk_status on risk_flags(status,score desc);
+create index if not exists sessions_ip on sessions(ip,created_at);

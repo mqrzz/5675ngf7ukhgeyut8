@@ -1,7 +1,38 @@
-const {q}=require('./db');const M=require('./metrics');const CFG=require('../config/rating.json');
+const {q}=require('./db');const M=require('./metrics');const DEFAULTS=require('../config/rating.json');
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const lerp=(v,full,zero)=>v<=full?1:v>=zero?0:1-(v-full)/(zero-full);
+let cache=null;
+async function rules(){
+ if(cache&&Date.now()-cache.t<15000)return cache.v;
+ const[r]=await q("select value from kv where key='rating_rules'");
+ let v=DEFAULTS;
+ if(r){try{const o=JSON.parse(r.value);if(validate(o).ok)v=o}catch(e){}}
+ cache={t:Date.now(),v};return v
+}
+function drop(){cache=null}
+const num=(v,a,b)=>typeof v==='number'&&isFinite(v)&&v>=a&&v<=b;
+function validate(o){
+ const e=[];
+ if(!o||typeof o!=='object'||!o.factors||!Array.isArray(o.levels))return{ok:false,errors:['shape']};
+ const F=o.factors,D=DEFAULTS.factors;
+ for(const k of Object.keys(D)){
+  if(!F[k]||typeof F[k]!=='object'){e.push(k);continue}
+  for(const f of Object.keys(D[k]))if(!num(F[k][f],0,f==='max'?100:f==='days'||f==='full_days'?3650:f==='broadcasts'?50:f.endsWith('_share')?1:f==='min_sends'?100000:100))e.push(k+'.'+f)
+ }
+ if(!e.length){const sum=Object.keys(D).reduce((a,k)=>a+F[k].max,0);if(Math.round(sum)!==100)e.push('sum')}
+ if(!e.length){if(F.conduct.complaint_zero<=F.conduct.complaint_full)e.push('conduct.complaint');if(F.conduct.unsub_zero<=F.conduct.unsub_full)e.push('conduct.unsub');if(F.deliverability.days<1)e.push('deliverability.days')}
+ const ids=['excellent','good','fair','low'];
+ if(o.levels.length!==4||!ids.every((id,i)=>o.levels[i]&&o.levels[i].id===id&&num(o.levels[i].min,0,100)))e.push('levels');
+ else if(!(o.levels[0].min>o.levels[1].min&&o.levels[1].min>o.levels[2].min&&o.levels[2].min>o.levels[3].min&&o.levels[3].min===0))e.push('levels.order');
+ return{ok:!e.length,errors:e}
+}
+async function save(o){
+ const v=validate(o);if(!v.ok)return v;
+ await q("insert into kv(key,value) values('rating_rules',$1) on conflict(key) do update set value=excluded.value",[JSON.stringify(o)]);drop();return v
+}
+async function reset(){await q("delete from kv where key='rating_rules'");drop()}
 async function compute(uid){
+ const CFG=await rules();
  const F=CFG.factors;
  const[u]=await q('select name,email,region,onboarded_at,created_at,coalesce(rating_adjust,0)::int adjust from users where id=$1',[uid]);
  if(!u)return null;
@@ -32,4 +63,4 @@ async function compute(uid){
  if(out.find(f=>f.state==='pending'))tips.push('deliverability');
  return{score,level,since:u.created_at,factors:out,tips:[...new Set(tips)],adjust:u.adjust,updated_at:new Date().toISOString()}
 }
-module.exports={compute};
+module.exports={compute,rules,validate,save,reset,DEFAULTS};

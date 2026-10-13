@@ -9,7 +9,7 @@ const BLOCKED=/\.(exe|scr|bat|cmd|com|pif|vbs|vbe|js|jse|jar|msi|lnk|ps1|reg|dll
 const HDR=new Set(['list-unsubscribe','list-unsubscribe-post','x-entity-ref-id','x-priority']);
 const MAXATT=10*1024*1024;
 const E=(code,extra)=>Object.assign(new Error(code),{code,extra:extra||{}});
-const STATUS={template_not_found:404,missing_variables:422,quota_exceeded:429,rate_limited:429,domain_not_verified:403,send_failed:502,spam_rejected:422};
+const STATUS={template_not_found:404,missing_variables:422,quota_exceeded:429,rate_limited:429,domain_not_verified:403,send_failed:502,spam_rejected:422,account_frozen:403,account_blocked:403};
 const status=code=>STATUS[code]||422;
 function parseAddr(s){s=String(s||'').trim();const m=/^"?([^"<]*?)"?\s*<([^<>]+)>$/.exec(s);const email=(m?m[2]:s).trim().toLowerCase();return{name:m?m[1].trim():'',email}}
 const arr=v=>v==null?[]:Array.isArray(v)?v:[v];
@@ -80,6 +80,7 @@ async function applyTemplate(uid,b){
 async function send(uid,b,keyId){
  const tplId=b&&b.template_id&&/^[0-9a-f-]{36}$/i.test(String(b.template_id))?String(b.template_id):null;
  b=await applyTemplate(uid,b);
+ const[ust]=await q('select status from users where id=$1',[uid]);if(ust&&ust.status!=='active')throw E(ust.status==='blocked'?'account_blocked':'account_frozen');
  const cfg=await SET.get(uid);
  const m=normalize(b);
  if(!m.from.name&&cfg.default_from_name)m.from.name=cfg.default_from_name;

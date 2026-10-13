@@ -34,7 +34,7 @@ function make(secure,t){
    if(v&&v.n>=10&&Date.now()-v.t<600000)return cb(err('Too many failed attempts, try again later',421));
    const pw=String(auth.password||'');
    if(!pw.startsWith('gs_')||pw.length>200){note(ip);return setTimeout(()=>cb(err('Invalid username or password',535)),400)}
-   q('update api_keys set last_used_at=now() where key_hash=$1 and revoked_at is null returning id,user_id',[sha(pw)]).then(r=>{
+   q('update api_keys set last_used_at=now() where key_hash=$1 and revoked_at is null returning id,user_id',[sha(pw)]).then(async r=>{if(r[0]){const[us]=await q('select status from users where id=$1',[r[0].user_id]);if(us&&us.status==='blocked'){note(ip);return cb(err('Account is not available',535))}}
     if(!r[0]){note(ip);return setTimeout(()=>cb(err('Invalid username or password',535)),400)}
     SET.get(r[0].user_id).then(cfg=>{if(!SET.ipAllowed(cfg,ip)){note(ip);return cb(err('Sending from this address is not allowed for your account',535))}cb(null,{user:{id:r[0].user_id,keyId:r[0].id}})},()=>cb(err('Temporary authentication failure',454)))},e=>{console.error('smtp auth',e.message);cb(err('Temporary authentication failure',454))})},
   onRcptTo(a,sess,cb){if(sess.envelope.rcptTo.length>=50)return cb(err('Too many recipients',452));cb()},
