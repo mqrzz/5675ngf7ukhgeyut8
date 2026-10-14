@@ -132,3 +132,5 @@ create table if not exists risk_flags(id bigserial primary key,user_id uuid not 
 create unique index if not exists risk_open_pair on risk_flags(user_id,coalesce(related_id,'00000000-0000-0000-0000-000000000000'::uuid),kind) where status='open';
 create index if not exists risk_status on risk_flags(status,score desc);
 create index if not exists sessions_ip on sessions(ip,created_at);
+create table if not exists maintenance(id int primary key default 1 check(id=1),active boolean not null default false,scope text not null default 'all',title text not null default '',message text not null default '',eta timestamptz,updated_at timestamptz not null default now(),updated_by uuid);
+insert into maintenance(id) values(1) on conflict do nothing;

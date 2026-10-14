@@ -133,6 +133,15 @@ r.patch('/siberia/:id',w(async(req,res)=>{
  if(uid)await notify(uid,'billing','siberia_'+st,note,'/app/settings/billing/','siberia:'+a.id+':'+st);
  require('../siberiamail').send(a,st,note);
  res.json({ok:true,status:st,attached:!!uid})}));
+const MT=require('../maintenance');
+r.get('/maintenance',w(async(req,res)=>{MT.reset();const m=await MT.get();res.set('Cache-Control','no-store');res.json(m)}));
+r.put('/maintenance',w(async(req,res)=>{
+ const b=req.body||{};const active=!!b.active;const scope=b.scope==='sending'?'sending':'all';
+ const title=String(b.title||'').trim().slice(0,120),message=String(b.message||'').trim().slice(0,1000);
+ let eta=null;if(b.eta){const d=new Date(b.eta);if(isNaN(d.getTime()))return res.status(422).json({error:'bad_eta'});eta=d.toISOString()}
+ await q('update maintenance set active=$1,scope=$2,title=$3,message=$4,eta=$5,updated_at=now(),updated_by=$6 where id=1',[active,scope,title,message,eta,req.user.id]);
+ await act(req.user.id,null,active?'maintenance_on':'maintenance_off',{scope,title,eta});
+ MT.reset();res.json({ok:true,...(await MT.get())})}));
 r.get('/incidents',w(async(req,res)=>res.json(await q('select * from incidents order by started_at desc limit 100'))));
 r.post('/incidents',w(async(req,res)=>{
  const b=req.body||{},title=String(b.title||'').trim().slice(0,160);if(!title)return res.status(400).json({error:'invalid_title'});
