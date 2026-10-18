@@ -134,7 +134,7 @@ r.post('/logout',w(async(req,res)=>{
  res.json({ok:true})
 }));
 
-r.get('/me',allowBlocked,need,w(async(req,res)=>{const [u]=await q('select id,email,name,plan,lang,notify,is_admin,status,region,account_country,data_region,currency,country,onboarded_at from users where id=$1',[req.user.id]);res.set('Cache-Control','no-store');const{onboarded_at,...rest}=u;res.json({...rest,onboarded:!!onboarded_at,display:REG.policy(u.region).display,login_methods:u.region?REG.policy(u.region).login:null})}));
+r.get('/me',allowBlocked,need,w(async(req,res)=>{const [u]=await q('select id,email,name,plan,lang,notify,is_admin,staff_role,status,region,account_country,data_region,currency,country,onboarded_at from users where id=$1',[req.user.id]);res.set('Cache-Control','no-store');const{onboarded_at,...rest}=u;res.json({...rest,onboarded:!!onboarded_at,display:REG.policy(u.region).display,login_methods:u.region?REG.policy(u.region).login:null})}));
 r.patch('/me',need,sessionOnly,w(async(req,res)=>{
  const name=String(req.body.name||'').replace(/[\u0000-\u001f]/g,' ').trim().slice(0,60);
  if(name.length<1)return res.status(400).json({error:'invalid_name'});

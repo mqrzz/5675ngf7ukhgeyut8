@@ -1,4 +1,4 @@
-const {transport,FROM}=require('./mailer');
+const BM=require('./brandmail');
 const APP=(process.env.APP_URL||'https://geserd.com').replace(/\/$/,'');
 const T={
  en:{received:{s:'We received your Siberia tariff application',b:'Hello,\n\nWe received your application for the Siberia tariff for {org}. We will review it and write to you at this address. We may ask for documents.\n\nIf you did not send this application, ignore this email.'},approved:{s:'Your Siberia tariff application is approved',b:'Hello,\n\nYour application for {org} is approved. Sign in to Geserd with this email address and the tariff applies to your account: free limits are three times larger and Pro and Business cost half.\n\n{app}/login/'},rejected:{s:'Your Siberia tariff application was not approved',b:'Hello,\n\nWe could not approve your application for {org}.{note}\n\nYou can send a new application with corrected details: {app}/siberia/#apply'},revoked:{s:'Your Siberia tariff has ended',b:'Hello,\n\nThe Siberia tariff for {org} has ended.{note}\n\nYour data stays in place and your limits return to the normal plan values. You can apply again: {app}/siberia/#apply'},reason:'\n\nReason: {x}',foot:'Geserd'},
@@ -8,10 +8,11 @@ const T={
 };
 async function send(a,kind,note){
  try{
-  const t=T[a.lang]||T.en,m=t[kind];if(!m||!a.email)return false;
+  const lang=T[a.lang]?a.lang:'en',t=T[lang],m=t[kind];if(!m||!a.email)return false;
   const n=note?t.reason.replace('{x}',note):'';
-  const body=m.b.replace('{org}',a.org_name).replace('{note}',n).replace(/\{app\}/g,APP)+'\n\n-- \n'+t.foot+' · '+APP;
-  await transport.sendMail({from:{name:'Geserd',address:FROM},to:a.email,subject:m.s,text:body});
+  const paras=m.b.replace('{org}',a.org_name).replace('{note}',n).replace(/\{app\}/g,APP).split(/\n\n+/).map(x=>x.trim()).filter(Boolean);
+  if(/^(hello|здравствуйте|bonjour|guten tag)/i.test(paras[0]))paras.shift();
+  await BM.send(a.email,{lang,subject:m.s,heading:m.s,paras});
   return true
  }catch(e){console.error('siberia mail',e.message);return false}
 }

@@ -1,9 +1,62 @@
 const r=require('express').Router();
 const {q}=require('../db');const {w,need,sessionOnly}=require('../auth');const {notify}=require('../notify');const {transport,FROM}=require('../mailer');
 const ID=/^[0-9a-f-]{36}$/i;
+const CTAH={en:'Open the conversation',ru:'Открыть переписку',fr:'Ouvrir la conversation',de:'Gespräch öffnen'};
 const SUBJ={en:'Geserd support replied to your ticket',ru:'Поддержка Geserd ответила на ваше обращение',fr:'Le support Geserd a répondu à votre demande',de:'Der Geserd-Support hat auf Ihre Anfrage geantwortet'};
 const APP=(process.env.APP_URL||'https://geserd.com').replace(/\/$/,'');
-r.use(need,sessionOnly,w(async(req,res,next)=>{const [u]=await q('select is_admin from users where id=$1',[req.user.id]);if(!u||!u.is_admin)return res.status(403).json({error:'forbidden'});next()}));
+const ROLES=['owner','director','admin','support'];
+const AREA={overview:['owner','director','admin','support'],tickets:['owner','director','admin','support'],users:['owner','director','admin','support'],review:['owner','director','admin'],risk:['owner','director','admin'],siberia:['owner','director','admin'],maintenance:['owner','director','admin'],incidents:['owner','director','admin'],'rating-rules':['owner','director'],sso:['owner','director'],staff:['owner','director'],me:ROLES};
+const WRITE_ONLY={users:['owner','director','admin']};
+r.use(need,sessionOnly,w(async(req,res,next)=>{
+ const [u]=await q('select id,email,is_admin,staff_role from users where id=$1',[req.user.id]);
+ if(!u||!u.is_admin)return res.status(403).json({error:'forbidden'});
+ const role=ROLES.includes(u.staff_role)?u.staff_role:'admin';
+ const area=(req.path.split('/')[1]||'overview');
+ const allow=AREA[area];
+ if(!allow||!allow.includes(role))return res.status(403).json({error:'forbidden_role'});
+ if(req.method!=='GET'&&WRITE_ONLY[area]&&!WRITE_ONLY[area].includes(role))return res.status(403).json({error:'forbidden_role'});
+ req.staff={id:u.id,email:u.email,role};next()}));
+r.get('/me',w(async(req,res)=>{
+ const role=req.staff.role;
+ res.json({role,areas:Object.keys(AREA).filter(k=>k!=='me'&&k!=='risk'&&AREA[k].includes(role)),can_write_users:WRITE_ONLY.users.includes(role)})}));
+const RANK={owner:4,director:3,admin:2,support:1};
+const staffView=x=>({id:x.id,email:x.email,name:x.name,role:ROLES.includes(x.staff_role)?x.staff_role:'admin',created_at:x.created_at,last_seen:x.last_seen||null});
+r.get('/staff',w(async(req,res)=>{
+ const rows=await q("select u.id,u.email,u.name,u.staff_role,u.created_at,(select max(created_at) from sessions s where s.user_id=u.id) last_seen from users u where u.is_admin order by case u.staff_role when 'owner' then 0 when 'director' then 1 when 'admin' then 2 else 3 end,u.created_at");
+ res.json({me:req.staff.id,my_role:req.staff.role,items:rows.map(staffView),assignable:req.staff.role==='owner'?['director','admin','support']:['admin','support']})}));
+r.post('/staff',w(async(req,res)=>{
+ const b=req.body||{},email=String(b.email||'').trim().toLowerCase(),role=String(b.role||'');
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return res.status(400).json({error:'invalid_email'});
+ if(!ROLES.includes(role)||role==='owner')return res.status(400).json({error:'invalid_role'});
+ if(RANK[role]>=RANK[req.staff.role])return res.status(403).json({error:'forbidden_role'});
+ const[u]=await q('select id,is_admin,staff_role from users where lower(email)=$1',[email]);
+ if(!u)return res.status(404).json({error:'user_not_found'});
+ if(u.is_admin)return res.status(409).json({error:'already_staff'});
+ await q('update users set is_admin=true,staff_role=$2 where id=$1',[u.id,role]);
+ await act(req.user.id,u.id,'staff_add',{role});
+ res.status(201).json({ok:true})}));
+r.patch('/staff/:id',w(async(req,res)=>{
+ if(!ID.test(req.params.id))return res.status(404).json({error:'not_found'});
+ const role=String((req.body||{}).role||'');
+ if(!ROLES.includes(role)||role==='owner')return res.status(400).json({error:'invalid_role'});
+ if(req.params.id===req.user.id)return res.status(403).json({error:'forbidden_self'});
+ const[u]=await q('select id,is_admin,staff_role from users where id=$1',[req.params.id]);
+ if(!u||!u.is_admin)return res.status(404).json({error:'not_found'});
+ const cur=ROLES.includes(u.staff_role)?u.staff_role:'admin';
+ if(RANK[cur]>=RANK[req.staff.role]||RANK[role]>=RANK[req.staff.role])return res.status(403).json({error:'forbidden_role'});
+ await q('update users set staff_role=$2 where id=$1',[u.id,role]);
+ await act(req.user.id,u.id,'staff_role',{from:cur,to:role});
+ res.json({ok:true,role})}));
+r.delete('/staff/:id',w(async(req,res)=>{
+ if(!ID.test(req.params.id))return res.status(404).json({error:'not_found'});
+ if(req.params.id===req.user.id)return res.status(403).json({error:'forbidden_self'});
+ const[u]=await q('select id,is_admin,staff_role from users where id=$1',[req.params.id]);
+ if(!u||!u.is_admin)return res.status(404).json({error:'not_found'});
+ const cur=ROLES.includes(u.staff_role)?u.staff_role:'admin';
+ if(RANK[cur]>=RANK[req.staff.role])return res.status(403).json({error:'forbidden_role'});
+ await q('update users set is_admin=false,staff_role=null where id=$1',[u.id]);
+ await act(req.user.id,u.id,'staff_remove',{role:cur});
+ res.json({ok:true})}));
 r.get('/tickets',w(async(req,res)=>{
  const st=['open','closed'].includes(req.query.status)?req.query.status:null;
  const rows=await q("select t.id,t.subject,t.topic,t.status,t.created_at,t.updated_at,u.email,(select author from ticket_messages m where m.ticket_id=t.id order by m.id desc limit 1) last_author from tickets t join users u on u.id=t.user_id "+(st?"where t.status=$1 ":"")+"order by t.updated_at desc limit 200",st?[st]:[]);
@@ -21,7 +74,7 @@ r.post('/tickets/:id/reply',w(async(req,res)=>{
  await q("insert into ticket_messages(ticket_id,author,body) values($1,'staff',$2)",[t.id,body]);
  await q("update tickets set updated_at=now(),status=$2 where id=$1",[t.id,req.body.close?'closed':'open']);
  await notify(t.user_id,'ticket','ticket_reply',t.subject,'/app/help/?t='+t.id);
- try{await transport.sendMail({from:{name:'Geserd',address:FROM},to:t.email,subject:SUBJ[t.lang]||SUBJ.en,text:body+'\n\n'+APP+'/app/help/?t='+t.id,headers:{'Auto-Submitted':'auto-generated'}})}catch(e){console.error('ticket mail',e.message)}
+ try{const BM=require('../brandmail');await BM.send(t.email,{lang:t.lang,subject:SUBJ[t.lang]||SUBJ.en,heading:SUBJ[t.lang]||SUBJ.en,tag:t.subject,paras:[body],cta:{label:CTAH[t.lang]||CTAH.en,url:APP+'/app/help/?t='+t.id}})}catch(e){console.error('ticket mail',e.message)}
  res.json({ok:true})}));
 const R=require('../rating');const MA=require('../accountmail');
 const PLAN_IDS=['free','pro','business','enterprise'],STATUSES=['active','frozen','blocked'];
@@ -133,6 +186,48 @@ r.patch('/siberia/:id',w(async(req,res)=>{
  if(uid)await notify(uid,'billing','siberia_'+st,note,'/app/settings/billing/','siberia:'+a.id+':'+st);
  require('../siberiamail').send(a,st,note);
  res.json({ok:true,status:st,attached:!!uid})}));
+const SSO=require('../sso');const {enc}=require('../secret');
+const DOM=/^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+const ssoView=x=>({domain:x.domain,issuer:x.issuer,client_id:x.client_id,enabled:x.enabled,created_at:x.created_at});
+const cleanDomain=v=>String(v||'').trim().toLowerCase().replace(/^@/,'');
+const cleanIssuer=v=>String(v||'').trim().replace(/\/+$/,'');
+r.get('/sso',w(async(req,res)=>{
+ res.json({redirect_uri:APP+'/api/auth/sso/callback',items:(await q('select domain,issuer,client_id,enabled,created_at from sso_connections order by created_at desc')).map(ssoView)})}));
+r.post('/sso/check',w(async(req,res)=>{
+ const issuer=cleanIssuer((req.body||{}).issuer);
+ if(!/^https:\/\//.test(issuer)&&!process.env.SSO_ALLOW_HTTP)return res.status(400).json({error:'invalid_issuer'});
+ try{const d=await SSO.discover(issuer);res.json({ok:true,authorization_endpoint:d.authorization_endpoint,token_endpoint:d.token_endpoint})}
+ catch(e){res.status(502).json({ok:false,error:e.message})}}));
+r.post('/sso',w(async(req,res)=>{
+ const b=req.body||{},domain=cleanDomain(b.domain),issuer=cleanIssuer(b.issuer),cid=String(b.client_id||'').trim().slice(0,300),sec=String(b.client_secret||'').trim().slice(0,2000);
+ if(!DOM.test(domain))return res.status(400).json({error:'invalid_domain'});
+ if(!/^https:\/\/[^\s]+$/.test(issuer)&&!(process.env.SSO_ALLOW_HTTP&&/^http:\/\/[^\s]+$/.test(issuer)))return res.status(400).json({error:'invalid_issuer'});
+ if(!cid||!sec)return res.status(400).json({error:'invalid_credentials'});
+ const[ex]=await q('select 1 from sso_connections where domain=$1',[domain]);
+ if(ex)return res.status(409).json({error:'sso_exists'});
+ try{await SSO.discover(issuer)}catch(e){return res.status(502).json({error:e.message})}
+ const[x]=await q('insert into sso_connections(domain,issuer,client_id,client_secret_enc,enabled) values($1,$2,$3,$4,true) returning domain,issuer,client_id,enabled,created_at',[domain,issuer,cid,enc(sec)]);
+ await act(req.user.id,null,'sso_add',{domain,issuer});
+ res.status(201).json(ssoView(x))}));
+r.patch('/sso/:domain',w(async(req,res)=>{
+ const domain=cleanDomain(req.params.domain),b=req.body||{};
+ const[cur]=await q('select * from sso_connections where domain=$1',[domain]);
+ if(!cur)return res.status(404).json({error:'not_found'});
+ let issuer=cur.issuer,cid=cur.client_id,secEnc=cur.client_secret_enc,en=cur.enabled;
+ if(b.enabled!=null)en=!!b.enabled;
+ if(b.issuer!=null){issuer=cleanIssuer(b.issuer);if(!/^https:\/\/[^\s]+$/.test(issuer)&&!(process.env.SSO_ALLOW_HTTP&&/^http:\/\/[^\s]+$/.test(issuer)))return res.status(400).json({error:'invalid_issuer'});if(issuer!==cur.issuer){try{await SSO.discover(issuer)}catch(e){return res.status(502).json({error:e.message})}}}
+ if(b.client_id!=null){cid=String(b.client_id).trim().slice(0,300);if(!cid)return res.status(400).json({error:'invalid_credentials'})}
+ if(b.client_secret){secEnc=enc(String(b.client_secret).trim().slice(0,2000))}
+ const[x]=await q('update sso_connections set issuer=$2,client_id=$3,client_secret_enc=$4,enabled=$5 where domain=$1 returning domain,issuer,client_id,enabled,created_at',[domain,issuer,cid,secEnc,en]);
+ await act(req.user.id,null,b.enabled!=null&&Object.keys(b).length===1?(en?'sso_enable':'sso_disable'):'sso_update',{domain});
+ res.json(ssoView(x))}));
+r.delete('/sso/:domain',w(async(req,res)=>{
+ const domain=cleanDomain(req.params.domain);
+ const[x]=await q('delete from sso_connections where domain=$1 returning domain',[domain]);
+ if(!x)return res.status(404).json({error:'not_found'});
+ await q('delete from oauth_accounts where provider=$1',['sso:'+domain]);
+ await act(req.user.id,null,'sso_delete',{domain});
+ res.json({ok:true})}));
 const MT=require('../maintenance');
 r.get('/maintenance',w(async(req,res)=>{MT.reset();const m=await MT.get();res.set('Cache-Control','no-store');res.json(m)}));
 r.put('/maintenance',w(async(req,res)=>{
@@ -142,6 +237,36 @@ r.put('/maintenance',w(async(req,res)=>{
  await q('update maintenance set active=$1,scope=$2,title=$3,message=$4,eta=$5,updated_at=now(),updated_by=$6 where id=1',[active,scope,title,message,eta,req.user.id]);
  await act(req.user.id,null,active?'maintenance_on':'maintenance_off',{scope,title,eta});
  MT.reset();res.json({ok:true,...(await MT.get())})}));
+r.get('/maintenance/notice',w(async(req,res)=>{res.set('Cache-Control','no-store');res.json(await MT.getNotice())}));
+r.put('/maintenance/notice',w(async(req,res)=>{
+ const b=req.body||{};const texts=MT.cleanTexts(b.texts);
+ if(b.active&&!Object.keys(texts).length)return res.status(422).json({error:'notice_empty'});
+ const d=v=>{if(!v)return null;const x=new Date(v);return isNaN(x.getTime())?undefined:x.toISOString()};
+ const st=d(b.starts_at),en=d(b.ends_at);
+ if(st===undefined||en===undefined)return res.status(422).json({error:'bad_eta'});
+ if(st&&en&&new Date(en)<=new Date(st))return res.status(422).json({error:'bad_eta'});
+ await q('update maintenance_notice set active=$1,texts=$2,starts_at=$3,ends_at=$4,updated_at=now(),updated_by=$5 where id=1',[!!b.active,JSON.stringify(texts),st,en,req.user.id]);
+ await act(req.user.id,null,b.active?'notice_on':'notice_off',{starts_at:st,ends_at:en});
+ res.json(await MT.getNotice())}));
+r.post('/maintenance/notice/email',w(async(req,res)=>{
+ const n=await MT.getNotice();
+ if(!Object.keys(n.texts||{}).length)return res.status(422).json({error:'notice_empty'});
+ const BM=require('../brandmail');
+ const CTA={en:'Open the status page',ru:'Открыть страницу статуса',fr:'Ouvrir la page d’état',de:'Statusseite öffnen'};
+ const TAG={en:'Planned maintenance',ru:'Плановые технические работы',fr:'Maintenance planifiée',de:'Geplante Wartung'};
+ const WHEN={en:'When',ru:'Когда',fr:'Quand',de:'Wann'};
+ const users=await q("select id,email,lang from users where status<>'blocked' and email is not null and email<>''");
+ let sent=0,failed=0;
+ const fmt=(v,l)=>v?new Date(v).toLocaleString({ru:'ru-RU',fr:'fr-FR',de:'de-DE',en:'en-GB'}[l]||'en-GB',{timeZone:'UTC',dateStyle:'long',timeStyle:'short'})+' UTC':'';
+ for(const u of users){
+  const l=MT.LANGS.includes(u.lang)?u.lang:'en',x=MT.pick(n.texts,l);
+  const when=n.starts_at?WHEN[l]+': '+fmt(n.starts_at,l)+(n.ends_at?' – '+fmt(n.ends_at,l):''):'';
+  try{await BM.send(u.email,{lang:l,subject:x.title||TAG[l],heading:x.title||TAG[l],tag:TAG[l],paras:[x.message,when],cta:{label:CTA[l],url:APP+'/status/'}});sent++}catch(e){failed++}
+  await q("insert into notifications(user_id,type,title,body,link,dedupe) values($1,'maintenance',$2,$3,'/status/',$4) on conflict do nothing",[u.id,String(x.title||TAG[l]).slice(0,160),String(x.message||'').slice(0,500),'mt:'+new Date(n.updated_at||Date.now()).getTime()]).catch(()=>{});
+ }
+ await q('update maintenance_notice set emailed_at=now(),emailed_count=$1 where id=1',[sent]);
+ await act(req.user.id,null,'notice_email',{sent,failed});
+ res.json({ok:true,sent,failed})}));
 r.get('/incidents',w(async(req,res)=>res.json(await q('select * from incidents order by started_at desc limit 100'))));
 r.post('/incidents',w(async(req,res)=>{
  const b=req.body||{},title=String(b.title||'').trim().slice(0,160);if(!title)return res.status(400).json({error:'invalid_title'});

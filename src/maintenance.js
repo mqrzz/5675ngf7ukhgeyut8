@@ -14,5 +14,12 @@ async function enforce(req,res,next){
  res.set('Retry-After','300');
  res.status(503).json({error:'maintenance',title:m.title,message:m.message,eta:m.eta});
 }
-async function publicState(_,res){const m=await get();res.set('Cache-Control','no-store');res.json({active:!!m.active,scope:m.scope,title:m.title,message:m.message,eta:m.eta})}
-module.exports={get,reset,enforce,publicState};
+const LANGS=['en','ru','fr','de'];
+function cleanTexts(t){const o={};for(const l of LANGS){const x=(t||{})[l]||{};const title=String(x.title||'').trim().slice(0,120),message=String(x.message||'').trim().slice(0,1000);if(title||message)o[l]={title,message}}return o}
+function pick(texts,lang){const x=(texts||{})[lang]||(texts||{}).en||Object.values(texts||{})[0]||{title:'',message:''};return x}
+async function getNotice(){try{const[r]=await q('select active,texts,starts_at,ends_at,emailed_at,emailed_count,updated_at from maintenance_notice where id=1');return r||{active:false,texts:{},starts_at:null,ends_at:null}}catch{return{active:false,texts:{},starts_at:null,ends_at:null}}}
+async function publicState(_,res){
+ const m=await get(),n=await getNotice();res.set('Cache-Control','no-store');
+ const live=n.active&&Object.keys(n.texts||{}).length&&(!n.ends_at||new Date(n.ends_at)>new Date());
+ res.json({active:!!m.active,scope:m.scope,title:m.title,message:m.message,eta:m.eta,notice:live?{texts:n.texts,starts_at:n.starts_at,ends_at:n.ends_at}:null})}
+module.exports={get,reset,enforce,publicState,getNotice,cleanTexts,pick,LANGS};
