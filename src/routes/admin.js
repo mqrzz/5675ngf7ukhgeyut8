@@ -5,7 +5,7 @@ const CTAH={en:'Open the conversation',ru:'Открыть переписку',fr
 const SUBJ={en:'Geserd support replied to your ticket',ru:'Поддержка Geserd ответила на ваше обращение',fr:'Le support Geserd a répondu à votre demande',de:'Der Geserd-Support hat auf Ihre Anfrage geantwortet'};
 const APP=(process.env.APP_URL||'https://geserd.com').replace(/\/$/,'');
 const ROLES=['owner','director','admin','support'];
-const AREA={overview:['owner','director','admin','support'],tickets:['owner','director','admin','support'],users:['owner','director','admin','support'],review:['owner','director','admin'],risk:['owner','director','admin'],siberia:['owner','director','admin'],maintenance:['owner','director','admin'],incidents:['owner','director','admin'],'rating-rules':['owner','director'],sso:['owner','director'],staff:['owner','director'],me:ROLES};
+const AREA={overview:['owner','director','admin','support'],tickets:['owner','director','admin','support'],users:['owner','director','admin','support'],review:['owner','director','admin'],risk:['owner','director','admin'],siberia:['owner','director','admin'],maintenance:['owner','director','admin'],incidents:['owner','director','admin'],'rating-rules':['owner','director'],analytics:['owner','director','admin'],sso:['owner','director'],staff:['owner','director'],me:ROLES};
 const WRITE_ONLY={users:['owner','director','admin']};
 r.use(need,sessionOnly,w(async(req,res,next)=>{
  const [u]=await q('select id,email,is_admin,staff_role from users where id=$1',[req.user.id]);
@@ -277,4 +277,18 @@ r.patch('/incidents/:id',w(async(req,res)=>{
  const b=req.body||{},st=['investigating','identified','monitoring','resolved'].includes(b.status)?b.status:null;
  const [i]=await q("update incidents set status=coalesce($2,status),body=coalesce($3,body),resolved_at=case when $2='resolved' then now() else resolved_at end where id=$1 returning *",[req.params.id,st,b.body==null?null:String(b.body).slice(0,2000)]);
  i?res.json(i):res.status(404).json({error:'not_found'})}));
+
+
+r.get('/analytics',w(async(req,res)=>{
+ res.set('Cache-Control','no-store');
+ const days=Math.max(1,Math.min(90,parseInt(req.query.days,10)||7));const since=`now()-interval '${days} days'`;
+ const [tot]=await q(`select count(*) filter(where kind='view')::int views,count(distinct sid)::int visitors,count(*) filter(where kind='click')::int clicks from page_events where ts>${since}`);
+ const pages=await q(`select path,count(*)::int views,count(distinct sid)::int visitors from page_events where kind='view' and ts>${since} group by path order by views desc limit 15`);
+ const countries=await q(`select country,count(distinct sid)::int visitors,count(*) filter(where kind='view')::int views from page_events where ts>${since} and country<>'' group by country order by visitors desc limit 15`);
+ const clicks=await q(`select path,label,count(*)::int n from page_events where kind='click' and ts>${since} and label<>'' group by path,label order by n desc limit 20`);
+ const series=await q(`select to_char(date_trunc('day',ts),'YYYY-MM-DD') d,count(*) filter(where kind='view')::int views,count(distinct sid)::int visitors from page_events where ts>${since} group by 1 order by 1`);
+ const devices=await q(`select device,count(distinct sid)::int visitors from page_events where ts>${since} group by device`);
+ const refs=await q(`select ref,count(distinct sid)::int visitors from page_events where kind='view' and ts>${since} and ref<>'' group by ref order by visitors desc limit 10`);
+ res.json({days,totals:tot,pages,countries,clicks,series,devices,refs})
+}));
 module.exports=r;

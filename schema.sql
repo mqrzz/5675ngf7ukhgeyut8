@@ -141,3 +141,6 @@ insert into maintenance(id) values(1) on conflict do nothing;
 create table if not exists maintenance_notice(id int primary key default 1 check(id=1),active boolean not null default false,texts jsonb not null default '{}',starts_at timestamptz,ends_at timestamptz,emailed_at timestamptz,emailed_count int not null default 0,updated_at timestamptz not null default now(),updated_by uuid);
 insert into maintenance_notice(id) values(1) on conflict do nothing;
 create table if not exists sso_connections(domain text primary key,issuer text not null,client_id text not null,client_secret_enc text not null,enabled boolean not null default true,created_at timestamptz not null default now());
+
+create table if not exists page_events(id bigserial primary key,ts timestamptz not null default now(),sid text not null,kind text not null,path text not null,label text not null default '',ref text not null default '',lang text not null default '',country text not null default '',device text not null default '');
+create index if not exists page_events_ts on page_events(ts);create index if not exists page_events_path on page_events(path);

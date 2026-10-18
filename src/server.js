@@ -31,7 +31,7 @@ app.use('/api/auth/2fa',require('./routes/twofa').login);
 app.use('/api/account',require('./routes/account'));
 app.use('/api/notifications',require('./routes/notifications'));
 app.use('/api/tickets',require('./routes/tickets'));
-app.use('/api/admin',require('./routes/admin'));
+app.use('/api/track',require('./routes/track'));app.use('/api/whois',require('./routes/whois'));app.use('/api/admin',require('./routes/admin'));
 app.use('/api/billing',express.urlencoded({extended:false,limit:'20kb'}),require('./routes/billing'));
 app.get('/api/status',async(_,res)=>{try{res.set('Cache-Control','public,max-age=15');res.json(await require('./status').report())}catch(e){console.error('status',e.message);res.status(503).json({error:'unavailable'})}});
 app.get('/api/smtp',(_,res)=>res.json(require('./smtp').state));
