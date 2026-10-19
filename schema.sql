@@ -144,3 +144,9 @@ create table if not exists sso_connections(domain text primary key,issuer text n
 
 create table if not exists page_events(id bigserial primary key,ts timestamptz not null default now(),sid text not null,kind text not null,path text not null,label text not null default '',ref text not null default '',lang text not null default '',country text not null default '',device text not null default '');
 create index if not exists page_events_ts on page_events(ts);create index if not exists page_events_path on page_events(path);
+
+create table if not exists org_mailboxes(id uuid primary key default gen_random_uuid(),address text unique not null,title text not null,kind text not null default 'general',staff_ids uuid[] not null default '{}',show_public boolean not null default false,created_at timestamptz not null default now());
+create table if not exists org_messages(id uuid primary key default gen_random_uuid(),mailbox_id uuid not null references org_mailboxes(id) on delete cascade,direction text not null,from_addr text not null,to_addrs text not null,subject text not null default '',text_body text,html text,message_id text,in_reply_to text,read_at timestamptz,sent_by uuid,created_at timestamptz not null default now());
+create index if not exists org_messages_box on org_messages(mailbox_id,direction,created_at desc);
+create table if not exists org_attachments(id uuid primary key default gen_random_uuid(),message_id uuid not null references org_messages(id) on delete cascade,filename text,content_type text,size int not null,data bytea not null);
+create index if not exists org_attachments_msg on org_attachments(message_id);

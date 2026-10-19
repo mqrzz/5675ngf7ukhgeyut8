@@ -1,11 +1,11 @@
-const r=require('express').Router();
+const express=require('express');const r=express.Router();const express15=()=>express.json({limit:'15mb'});
 const {q}=require('../db');const {w,need,sessionOnly}=require('../auth');const {notify}=require('../notify');const {transport,FROM}=require('../mailer');
 const ID=/^[0-9a-f-]{36}$/i;
 const CTAH={en:'Open the conversation',ru:'Открыть переписку',fr:'Ouvrir la conversation',de:'Gespräch öffnen'};
 const SUBJ={en:'Geserd support replied to your ticket',ru:'Поддержка Geserd ответила на ваше обращение',fr:'Le support Geserd a répondu à votre demande',de:'Der Geserd-Support hat auf Ihre Anfrage geantwortet'};
 const APP=(process.env.APP_URL||'https://geserd.com').replace(/\/$/,'');
 const ROLES=['owner','director','admin','support'];
-const AREA={overview:['owner','director','admin','support'],tickets:['owner','director','admin','support'],users:['owner','director','admin','support'],review:['owner','director','admin'],risk:['owner','director','admin'],siberia:['owner','director','admin'],maintenance:['owner','director','admin'],incidents:['owner','director','admin'],'rating-rules':['owner','director'],analytics:['owner','director','admin'],sso:['owner','director'],staff:['owner','director'],me:ROLES};
+const AREA={mail:['owner','director','admin','support'],overview:['owner','director','admin','support'],tickets:['owner','director','admin','support'],users:['owner','director','admin','support'],review:['owner','director','admin'],risk:['owner','director','admin'],siberia:['owner','director','admin'],maintenance:['owner','director','admin'],incidents:['owner','director','admin'],'rating-rules':['owner','director'],analytics:['owner','director','admin'],sso:['owner','director'],staff:['owner','director'],me:ROLES};
 const WRITE_ONLY={users:['owner','director','admin']};
 r.use(need,sessionOnly,w(async(req,res,next)=>{
  const [u]=await q('select id,email,is_admin,staff_role from users where id=$1',[req.user.id]);
@@ -16,6 +16,7 @@ r.use(need,sessionOnly,w(async(req,res,next)=>{
  if(!allow||!allow.includes(role))return res.status(403).json({error:'forbidden_role'});
  if(req.method!=='GET'&&WRITE_ONLY[area]&&!WRITE_ONLY[area].includes(role))return res.status(403).json({error:'forbidden_role'});
  req.staff={id:u.id,email:u.email,role};next()}));
+r.use('/mail',express15(),require('./orgmail'));
 r.get('/me',w(async(req,res)=>{
  const role=req.staff.role;
  res.json({role,areas:Object.keys(AREA).filter(k=>k!=='me'&&k!=='risk'&&AREA[k].includes(role)),can_write_users:WRITE_ONLY.users.includes(role)})}));

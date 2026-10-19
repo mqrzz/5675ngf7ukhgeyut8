@@ -1,7 +1,7 @@
 const {SMTPServer}=require('smtp-server');const {simpleParser}=require('mailparser');const c=require('crypto');
 const {q}=require('./db');const {emit}=require('./events');const PLANS=require('./plans');
 const BASE=(process.env.BASE_DOMAIN||'geserd.com').toLowerCase();
-const MAX=10*1024*1024;
+const MAX=10*1024*1024;const OM=require('./orgmail');
 const owner=async d=>{
  const [a]=await q("select user_id from domains where name=$1 and status='verified' and receiving_ok limit 1",[d]);if(a)return{user_id:a.user_id,domain:true};
  if(d.endsWith('.'+BASE)){const slug=d.slice(0,-(BASE.length+1));if(slug&&!slug.includes('.')){const [s]=await q('select user_id from subdomains where slug=$1',[slug]);if(s)return{user_id:s.user_id,domain:false}}}
@@ -13,6 +13,7 @@ async function store(sess,raw){
  const by=new Map();
  for(const r of sess.envelope.rcptTo){const a=r.address.toLowerCase(),d=a.split('@')[1],o=await owner(d);if(!o)continue;const k=o.user_id;if(!by.has(k))by.set(k,[]);by.get(k).push(a)}
  const ids=[];let over=false;
+ {const om=sess.envelope.rcptTo.map(r=>r.address.toLowerCase());const got=await OM.receive(p,om,from);for(const x of got)ids.push(x)}
  for(const [uid,addrs] of by){
   const [{plan}]=await q('select eff_plan(plan,tariff) plan from users where id=$1',[uid]);const P=PLANS[plan]||PLANS.free;
   if(P.inbound){const [{n}]=await q("select count(*)::int n from emails where user_id=$1 and direction='in' and created_at>=date_trunc('month',now())",[uid]);if(n>=P.inbound){over=true;continue}}
@@ -26,10 +27,11 @@ async function store(sess,raw){
 
  if(!ids.length&&over)throw Object.assign(new Error('over quota'),{quota:true});
  return ids}
+function rcpt(addr,cb){const d=String(addr.address.split('@')[1]||'').toLowerCase();owner(d).then(o=>{if(!o){const e=new Error('Recipient address rejected: user unknown');e.responseCode=550;return cb(e)}cb()},e=>{e.responseCode=451;cb(e)})}
 function start(){
  if(process.env.INBOUND_PORT==='off')return;
  const srv=new SMTPServer({authOptional:true,disabledCommands:['AUTH','STARTTLS'],size:MAX,disableReverseLookup:true,banner:'Geserd inbound',
-  onRcptTo(addr,sess,cb){const d=String(addr.address.split('@')[1]||'').toLowerCase();owner(d).then(o=>{if(!o){const e=new Error('Recipient address rejected: user unknown');e.responseCode=550;return cb(e)}cb()},e=>{e.responseCode=451;cb(e)})},
+  onRcptTo(addr,sess,cb){OM.box(addr.address).then(b=>{if(b)return cb();rcpt(addr,cb)},e=>{e.responseCode=451;cb(e)})},
   onData(stream,sess,cb){const ch=[];let n=0;stream.on('data',b=>{n+=b.length;if(n<=MAX)ch.push(b)});
    stream.on('end',()=>{if(stream.sizeExceeded){const e=new Error('Message too large');e.responseCode=552;return cb(e)}
     store(sess,Buffer.concat(ch)).then(ids=>{if(!ids.length){const e=new Error('Mailbox unavailable');e.responseCode=550;return cb(e)}cb()},e=>{if(!e.quota)console.error('inbound',e.message);const x=new Error(e.quota?'Mailbox over quota, try again later':'Temporary local problem, try again later');x.responseCode=e.quota?452:451;cb(x)})})}});

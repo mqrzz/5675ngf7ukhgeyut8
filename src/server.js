@@ -1,5 +1,5 @@
 const express=require('express');const {q}=require('./db');
-const app=express();app.set('trust proxy',1);app.use('/api/emails',express.json({limit:'15mb'}));app.use(express.json({limit:'1mb'}));
+const app=express();app.set('trust proxy',1);app.use('/api/emails',express.json({limit:'15mb'}));app.use('/api/admin/mail',express.json({limit:'15mb'}));app.use(express.json({limit:'1mb'}));
 const GEO=require('./geo');
 app.get('/api/geo/check',GEO.check);
 app.get('/api/geo',GEO.info);

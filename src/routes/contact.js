@@ -14,4 +14,5 @@ r.post('/',w(async(req,res)=>{
  if(to){try{await transport.sendMail({from:{name:'Geserd contact form',address:FROM},to,replyTo:{name:name||email,address:email},subject:'['+topic+'] '+(name||email),text:'From: '+(name||'-')+' <'+email+'>\nTopic: '+topic+'\nIP: '+req.ip+'\n\n'+message})}catch(e){console.error('contact mail failed',e.message)}}
  res.json({ok:true});
 }));
+r.get('/addresses',w(async(_q,res)=>{const rows=await q('select address,title,kind from org_mailboxes where show_public order by created_at');res.set('Cache-Control','public,max-age=300').json({items:rows})}));
 module.exports=r;
