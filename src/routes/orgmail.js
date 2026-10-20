@@ -2,7 +2,7 @@ const r=require('express').Router();
 const {q}=require('../db');const {w}=require('../auth');const {transport}=require('../mailer');const OM=require('../orgmail');
 const ID=/^[0-9a-f-]{36}$/i;
 const FULL=['owner','director'];
-const KINDS=['general','support','government','legal','press','security','billing','custom'];
+const KINDS=['general','support','government','legal','press','security','billing','partnerships','advertising','careers','abuse','custom'];
 const canBox=async(req,id)=>{if(!ID.test(id))return null;const [b]=await q('select * from org_mailboxes where id=$1',[id]);if(!b)return null;if(FULL.includes(req.staff.role)||(b.staff_ids||[]).includes(req.staff.id))return b;return false};
 r.get('/boxes',w(async(req,res)=>{
  const all=FULL.includes(req.staff.role);
@@ -33,6 +33,10 @@ r.delete('/boxes/:id',w(async(req,res)=>{
  if(!FULL.includes(req.staff.role))return res.status(403).json({error:'forbidden_role'});
  if(!ID.test(req.params.id))return res.status(404).json({error:'not_found'});
  await q('delete from org_mailboxes where id=$1',[req.params.id]);res.json({ok:true})}));
+r.get('/all',w(async(req,res)=>{
+ const all=FULL.includes(req.staff.role),dir=req.query.folder==='out'?'out':'in',off=Math.max(0,parseInt(req.query.offset,10)||0);
+ const rows=await q("select m.id,m.mailbox_id,b.title box_title,b.address box_address,m.from_addr,m.to_addrs,m.subject,left(coalesce(m.text_body,''),160) preview,m.read_at,m.created_at,(select count(*)::int from org_attachments a where a.message_id=m.id) atts from org_messages m join org_mailboxes b on b.id=m.mailbox_id where m.direction=$1 "+(all?'':'and $3=any(b.staff_ids) ')+"order by m.created_at desc limit 50 offset $2",all?[dir,off]:[dir,off,req.staff.id]);
+ res.json({items:rows})}));
 r.get('/boxes/:id/messages',w(async(req,res)=>{
  const b=await canBox(req,req.params.id);if(b===null)return res.status(404).json({error:'not_found'});if(b===false)return res.status(403).json({error:'forbidden_role'});
  const dir=req.query.folder==='out'?'out':'in',off=Math.max(0,parseInt(req.query.offset,10)||0);

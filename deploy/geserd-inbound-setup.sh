@@ -20,7 +20,7 @@ hosts = $PGH
 user = $PGU
 password = $PGP
 dbname = $PGD
-query = SELECT '$2' FROM domains WHERE name = '%s' AND status = 'verified' AND receiving_ok UNION SELECT '$2' FROM subdomains WHERE slug || '.$BASE' = '%s'
+query = SELECT '$2' FROM domains WHERE name = '%s' AND status = 'verified' AND receiving_ok UNION SELECT '$2' FROM subdomains WHERE slug || '.$BASE' = '%s' UNION SELECT '$2' WHERE '%s' = '$BASE' AND EXISTS (SELECT 1 FROM org_mailboxes)
 CF
   chown root:postfix "$1"; chmod 640 "$1"
 }
@@ -38,8 +38,8 @@ if ! postfix check; then
   cp -a "/etc/postfix/main.cf.geserd-$TS" /etc/postfix/main.cf
   exit 1
 fi
-echo "== lookup test (a verified receiving domain or claimed subdomain should print a value, others print nothing)"
+echo "== lookup test ($BASE should print a value once at least one organization mailbox exists; others print nothing)"
 for d in "$BASE" nonexistent-test-domain.invalid; do printf '%s -> ' "$d"; postmap -q "$d" pgsql:/etc/postfix/geserd-transport.cf || true; echo; done
 systemctl reload postfix
-echo "== done. Postfix now hands mail for verified receiving domains and claimed *.$BASE subdomains to 127.0.0.1:2525 (Geserd inbound). Antviz mail is untouched."
+echo "== done. Postfix now hands mail for verified receiving domains, claimed *.$BASE subdomains and the organization mailboxes at $BASE to 127.0.0.1:2525 (Geserd inbound). Antviz mail is untouched."
 echo "Backup of main.cf: /etc/postfix/main.cf.geserd-$TS"

@@ -17,4 +17,9 @@ async function receive(parsed,rcpts,from){
   const to=((parsed.to&&parsed.to.text)||a).slice(0,1000);
   const s=await save(b,{direction:'in',from:(from||'').toLowerCase(),to,subject:parsed.subject,text:parsed.text,html:parsed.html||null,message_id:parsed.messageId,in_reply_to:parsed.inReplyTo},parsed.attachments);ids.push(s.id)}
  return ids}
-module.exports={box,save,receive,BASE,MAX_ATT,allowed};
+const DEFAULTS=[['support','Support','support'],['gov','Government requests','government'],['partners','Partnerships','partnerships']];
+async function ensureDefaults(){
+ try{const [m]=await q("insert into org_meta(key) values('defaults_v1') on conflict do nothing returning key");if(!m)return;
+  for(const [l,t,k] of DEFAULTS){const a=l+'@'+BASE;await q('insert into org_mailboxes(address,title,kind,show_public) values($1,$2,$3,true) on conflict(address) do update set show_public=true',[a,t,k])}}
+ catch(e){console.error('orgmail defaults',e.message)}}
+module.exports={box,save,receive,ensureDefaults,BASE,MAX_ATT,allowed};

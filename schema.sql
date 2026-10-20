@@ -150,3 +150,7 @@ create table if not exists org_messages(id uuid primary key default gen_random_u
 create index if not exists org_messages_box on org_messages(mailbox_id,direction,created_at desc);
 create table if not exists org_attachments(id uuid primary key default gen_random_uuid(),message_id uuid not null references org_messages(id) on delete cascade,filename text,content_type text,size int not null,data bytea not null);
 create index if not exists org_attachments_msg on org_attachments(message_id);
+create table if not exists org_meta(key text primary key,created_at timestamptz not null default now());
+create table if not exists team_members(owner_id uuid not null references users(id) on delete cascade,user_id uuid not null references users(id) on delete cascade,role text not null default 'member',created_at timestamptz not null default now(),primary key(owner_id,user_id));
+create table if not exists team_invites(id uuid primary key default gen_random_uuid(),owner_id uuid not null references users(id) on delete cascade,email text not null,role text not null default 'member',token_hash text not null unique,created_at timestamptz not null default now(),expires_at timestamptz not null default now()+interval '7 days',accepted_at timestamptz,revoked_at timestamptz);
+create index if not exists team_invites_owner on team_invites(owner_id) where accepted_at is null and revoked_at is null;

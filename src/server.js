@@ -30,7 +30,7 @@ app.use('/api/account/2fa',require('./routes/twofa').account);
 app.use('/api/auth/2fa',require('./routes/twofa').login);
 app.use('/api/account',require('./routes/account'));
 app.use('/api/notifications',require('./routes/notifications'));
-app.use('/api/tickets',require('./routes/tickets'));
+app.use('/api/tickets',require('./routes/tickets'));app.use('/api/team',require('./routes/team'));
 app.use('/api/track',require('./routes/track'));app.use('/api/whois',require('./routes/whois'));app.use('/api/admin',require('./routes/admin'));
 app.use('/api/billing',express.urlencoded({extended:false,limit:'20kb'}),require('./routes/billing'));
 app.get('/api/status',async(_,res)=>{try{res.set('Cache-Control','public,max-age=15');res.json(await require('./status').report())}catch(e){console.error('status',e.message);res.status(503).json({error:'unavailable'})}});
@@ -43,7 +43,7 @@ const housekeeping=()=>{require('./bstats').snapshot().then(()=>require('./metri
 setInterval(housekeeping,3600000).unref();setTimeout(housekeeping,60000).unref();
 const port=process.env.PORT||3001;app.listen(port,'127.0.0.1',()=>console.log('geserd api on 127.0.0.1:'+port));
 require('./mailevents').start();
-require('./inbound').start();
+require('./inbound').start();require('./orgmail').ensureDefaults();
 require('./webhooks').start();
 require('./smtp').start();
 require('./status').start();
