@@ -22,10 +22,10 @@ async function rdapBases(tld){
  const list=[];
  try{
   if(!boot||Date.now()-bootAt>86400000){const x=await jget('https://data.iana.org/rdap/dns.json',6000);if(x.ok){boot=await x.json();bootAt=Date.now()}}
-  if(boot)for(const [tlds,urls] of boot.services||[])if(tlds.includes(tld)){for(const u of urls)if(u.startsWith('https://'))list.push(u);break}
+  if(boot)for(const [tlds,urls] of boot.services||[])if(tlds.includes(tld)){for(const u of urls)if(u.startsWith('https://'))list.push({url:u,auth:true});break}
  }catch{}
- if(RDAP_FALLBACK[tld]&&!list.includes(RDAP_FALLBACK[tld]))list.push(RDAP_FALLBACK[tld]);
- list.push('https://rdap.org/');
+ if(RDAP_FALLBACK[tld]&&!list.some(x=>x.url===RDAP_FALLBACK[tld]))list.push({url:RDAP_FALLBACK[tld],auth:true});
+ list.push({url:'https://rdap.org/',auth:false});
  return list
 }
 const ev=(o,a)=>{const e=(o.events||[]).find(x=>x.eventAction===a);return e?e.eventDate:null};
@@ -44,8 +44,8 @@ async function viaRdap(d){
  const tld=d.split('.').pop();let last=null;
  for(const base of await rdapBases(tld)){
   try{
-   const x=await jget(base.replace(/\/?$/,'/')+'domain/'+encodeURIComponent(d),8000);
-   if(x.status===404)return{registered:false,source:'rdap'};
+   const x=await jget(base.url.replace(/\/?$/,'/')+'domain/'+encodeURIComponent(d),8000);
+   if(x.status===404){if(base.auth)return{registered:false,source:'rdap'};last=new Error('rdap 404 (no authoritative server)');continue}
    if(!x.ok){last=new Error('rdap '+x.status);continue}
    return parseRdap(d,await x.json())
   }catch(e){last=e}
@@ -140,6 +140,7 @@ r.get('/',async(req,res)=>{
   }
   const hasDns=!!(dn.ns.length||dn.a.length||dn.aaaa.length||dn.mx.length||dn.soa);
   const v={domain:d,unicode:require('url').domainToUnicode(d)||d,tld:d.split('.').pop(),registry:reg,dns:dn,hosting:host,tls:cert,hasDns,checked:new Date().toISOString()};
+  if(reg.ok&&!reg.registered&&hasDns){reg.ok=false;delete reg.registered;reg.error='registry_conflict'}
   if(!reg.ok&&!hasDns)return res.status(502).json({error:'lookup_failed'});
   cache.set(d,{t:now+300000,v});if(cache.size>500)cache.delete(cache.keys().next().value);
   res.json(v)
