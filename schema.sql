@@ -158,3 +158,4 @@ create table if not exists automations(id uuid primary key default gen_random_uu
 create index if not exists automations_user on automations(user_id);
 create table if not exists automation_runs(id uuid primary key default gen_random_uuid(),automation_id uuid not null references automations(id) on delete cascade,email text not null,payload jsonb not null default '{}',step_idx int not null default 0,run_at timestamptz not null default now(),status text not null default 'pending',error text,created_at timestamptz not null default now(),finished_at timestamptz);
 create index if not exists automation_runs_due on automation_runs(run_at) where status='pending';
+create table if not exists unsub_style(user_id uuid primary key references users(id) on delete cascade,bg text not null default '#050508',tx text not null default '#edeef0',accent text not null default '#363a3f',hide_branding boolean not null default false,updated_at timestamptz not null default now());

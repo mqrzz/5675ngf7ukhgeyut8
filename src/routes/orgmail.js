@@ -73,7 +73,7 @@ r.post('/boxes/:id/send',w(async(req,res)=>{
   if(!(await OM.allowed(a.filename,buf)))return res.status(400).json({error:'attachment_blocked',filename:a.filename});
   atts.push({filename:String(a.filename||'file').slice(0,200),content:buf,contentType:String(a.content_type||'application/octet-stream')})}
  const mid='<'+require('crypto').randomUUID()+'@'+OM.BASE+'>';
- try{await transport.sendMail({from:{name:b.title,address:b.address},to,subject,text,attachments:atts,messageId:mid,inReplyTo:reply||undefined,references:reply||undefined,replyTo:b.address})}catch(e){console.error('orgmail send',e.message);return res.status(502).json({error:'send_failed'})}
+ try{await transport.sendMail({from:{name:b.title,address:b.address},to,subject,text,attachments:atts,messageId:mid,inReplyTo:reply||undefined,references:reply||undefined,replyTo:b.address})}catch(e){console.error('orgmail send',e.message);return res.status(502).json({error:'send_failed',detail:String(e.message||'').slice(0,240)})}
  const s=await OM.save(b,{direction:'out',from:b.address,to:to.join(', '),subject,text,message_id:mid,in_reply_to:reply,sent_by:req.staff.id},atts.map(a=>({filename:a.filename,content:a.content,contentType:a.contentType})));
  res.json({id:s.id})}));
 module.exports=r;

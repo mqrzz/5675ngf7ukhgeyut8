@@ -12,7 +12,7 @@ app.use('/api/auth/sso',require('./routes/sso'));
 app.use('/api/auth',require('./routes/auth'));
 app.use('/api/api-keys',require('./routes/keys'));
 app.use('/api/domains',require('./routes/domains'));
-app.use('/api/emails',require('./routes/emails'));app.use('/api/mcp',require('./routes/mcp'));app.use('/api/automations',require('./routes/automations'));app.use('/api/events',require('./routes/events_in'));
+app.use('/api/emails',require('./routes/emails'));app.use('/api/mcp',require('./routes/mcp'));app.use('/api/unsubscribe-style',require('./routes/unsub_style'));app.use('/api/automations',require('./routes/automations'));app.use('/api/events',require('./routes/events_in'));
 app.use('/api/subdomain',require('./routes/subdomain'));
 app.use('/api/usage',require('./routes/usage'));
 app.use('/api/siberia',require('./routes/siberia'));
