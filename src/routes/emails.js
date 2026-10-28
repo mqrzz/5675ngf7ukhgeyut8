@@ -14,6 +14,7 @@ r.get('/',w(async(req,res)=>{
  const lim=Math.min(100,Math.max(1,parseInt(req.query.limit,10)||25));const args=[req.user.id];let where='user_id=$1';
  if(req.query.direction==='in'||req.query.direction==='out'){args.push(req.query.direction);where+=' and direction=$'+args.length}
  if(req.query.status){args.push(String(req.query.status));where+=' and status=$'+args.length}
+ if(req.query.q){const x='%'+String(req.query.q).slice(0,100).replace(/[\\%_]/g,m=>'\\'+m)+'%';args.push(x);where+=' and (subject ilike $'+args.length+' or from_addr ilike $'+args.length+' or to_addrs::text ilike $'+args.length+')'}
  if(req.query.before){const t=new Date(req.query.before);if(!isNaN(t)){args.push(t.toISOString());where+=' and created_at<$'+args.length}}
  const rows=await q('select id,direction,from_addr,to_addrs,subject,status,created_at from emails where '+where+' order by created_at desc limit '+(lim+1),args);
  res.json({data:rows.slice(0,lim),next:rows.length>lim?rows[lim-1].created_at:null});

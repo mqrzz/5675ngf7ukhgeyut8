@@ -9,7 +9,7 @@ const BLOCKED=/\.(exe|scr|bat|cmd|com|pif|vbs|vbe|js|jse|jar|msi|lnk|ps1|reg|dll
 const HDR=new Set(['list-unsubscribe','list-unsubscribe-post','x-entity-ref-id','x-priority']);
 const MAXATT=10*1024*1024;
 const E=(code,extra)=>Object.assign(new Error(code),{code,extra:extra||{}});
-const STATUS={template_not_found:404,missing_variables:422,quota_exceeded:429,rate_limited:429,domain_not_verified:403,send_failed:502,spam_rejected:422,account_frozen:403,account_blocked:403};
+const STATUS={template_not_found:404,missing_variables:422,quota_exceeded:429,rate_limited:429,domain_not_verified:403,send_failed:502,spam_rejected:422,account_frozen:403,account_blocked:403,domain_not_allowed:403};
 const status=code=>STATUS[code]||422;
 function parseAddr(s){s=String(s||'').trim();const m=/^"?([^"<]*?)"?\s*<([^<>]+)>$/.exec(s);const email=(m?m[2]:s).trim().toLowerCase();return{name:m?m[1].trim():'',email}}
 const arr=v=>v==null?[]:Array.isArray(v)?v:[v];
@@ -87,6 +87,7 @@ async function send(uid,b,keyId){
  if(!m.reply&&cfg.default_reply_to)m.reply=cfg.default_reply_to;
  if(!rate(uid))throw E('rate_limited');
  const {d,signer}=await resolve(uid,m);
+ if(keyId){const [kd]=await q('select domain_id from api_keys where id=$1',[keyId]);if(kd&&kd.domain_id&&!(d&&d.id===kd.domain_id))throw E('domain_not_allowed')}
  const [{plan}]=await q('select eff_plan(plan,tariff) plan from users where id=$1',[uid]);const P=PLANS[plan]||PLANS.free;
  const [u]=await q("select coalesce(sum(jsonb_array_length(to_addrs)) filter(where created_at>=date_trunc('month',now())),0)::int m,coalesce(sum(jsonb_array_length(to_addrs)) filter(where created_at>=date_trunc('day',now())),0)::int d from emails where user_id=$1 and direction='out' and status<>'rejected'",[uid]);
  if(P.daily&&u.d+m.all.length>P.daily)throw E('quota_exceeded',{scope:'daily',limit:P.daily,used:u.d});

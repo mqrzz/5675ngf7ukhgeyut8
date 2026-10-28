@@ -16,7 +16,7 @@ function footer(url,html){
  return'\n\n--\nYou are receiving this email because you subscribed.\nUnsubscribe: '+url
 }
 function compose(b,r,url){
- const v={first_name:r.first_name||'',last_name:r.last_name||'',email:r.email,unsubscribe_url:url};
+ const v={...(r.props||{}),first_name:r.first_name||'',last_name:r.last_name||'',email:r.email,unsubscribe_url:url};
  let html=b.html?TPL.render(b.html,v,true):null,text=b.text_body?TPL.render(b.text_body,v,false):null;
  if(html){const f=footer(url,true);html=/<\/body>/i.test(html)?html.replace(/<\/body>/i,f+'</body>'):html+f}
  if(!html&&!text)throw E('empty_body');
@@ -24,8 +24,14 @@ function compose(b,r,url){
  return{from:b.from_addr,to:[r.email],reply_to:b.reply_to||undefined,subject:TPL.render(b.subject||'',v,false),html:html||undefined,text,headers:{'List-Unsubscribe':'<'+oneClick(token(r.contact_id||r.id||'00000000-0000-0000-0000-000000000000'))+'>','List-Unsubscribe-Post':'List-Unsubscribe=One-Click'}}
 }
 function nextBoundary(scope){const d=new Date();if(scope==='daily')return new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()+1,0,5));return new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,1,0,5))}
+function filt(b){const a=[b.audience_id];let w='c.audience_id=$1 and not c.unsubscribed';
+ if(b.segment_id){a.push(b.segment_id);w+=' and exists(select 1 from segment_contacts sc where sc.segment_id=$'+a.length+' and sc.contact_id=c.id)'}
+ if(b.topic_id){a.push(b.topic_id);w+=' and coalesce((select ct.subscribed from contact_topics ct where ct.topic_id=$'+a.length+' and ct.contact_id=c.id),(select tp.default_on from topics tp where tp.id=$'+a.length+'))'}
+ return{w,a}}
+async function count(b){const f=filt(b);return(await q('select count(*)::int n from contacts c where '+f.w,f.a))[0].n}
 async function start(b){
- const rows=await q("insert into broadcast_recipients(broadcast_id,contact_id,email,first_name,last_name) select $1,id,email,first_name,last_name from contacts where audience_id=$2 and not unsubscribed on conflict do nothing returning 1",[b.id,b.audience_id]);
+ const f=filt(b),n=f.a.length+1;
+ const rows=await q("insert into broadcast_recipients(broadcast_id,contact_id,email,first_name,last_name,props) select $"+n+",c.id,c.email,c.first_name,c.last_name,c.props from contacts c where "+f.w+" on conflict do nothing returning 1",[...f.a,b.id]);
  await q("update broadcasts set status='sending',total=(select count(*) from broadcast_recipients where broadcast_id=$1),started_at=coalesce(started_at,now()),resume_at=null,error=null,updated_at=now() where id=$1",[b.id]);
  return rows.length
 }
@@ -70,4 +76,4 @@ async function tick(){
  }finally{busy=false}
 }
 function startWorker(){const t=setInterval(()=>tick().catch(e=>console.error('broadcast',e.message)),4000);t.unref()}
-module.exports={token,verify,start,tick,startWorker,compose,pageUrl,footer};
+module.exports={token,verify,start,count,tick,startWorker,compose,pageUrl,footer};

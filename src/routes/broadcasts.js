@@ -4,7 +4,7 @@ const ADDR=/^[^\s@<>"',;]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$/i;
 const UUID=/^[0-9a-f-]{36}$/i;const BASE=(process.env.BASE_DOMAIN||'geserd.com').toLowerCase();
 const clip=(v,n)=>v==null?null:String(v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'').slice(0,n);
 const line=(v,n)=>{v=clip(v,n);return v==null?null:v.replace(/[\r\n]+/g,' ').trim()};
-const COLS='id,audience_id,audience_name,name,from_addr,reply_to,subject,template_id,status,error,total,sent,failed,skipped,scheduled_at,resume_at,started_at,finished_at,created_at,updated_at';
+const COLS='id,audience_id,audience_name,segment_id,topic_id,name,from_addr,reply_to,subject,template_id,status,error,total,sent,failed,skipped,scheduled_at,resume_at,started_at,finished_at,created_at,updated_at';
 r.use(need);
 async function mine(uid,id){if(!UUID.test(String(id)))return null;const[b]=await q('select * from broadcasts where id=$1 and user_id=$2',[id,uid]);return b||null}
 function view(b){const o={};for(const k of COLS.split(','))o[k]=b[k];o.has_html=!!b.html;o.has_text=!!b.text_body;return o}
@@ -12,6 +12,11 @@ async function fields(uid,body,cur){
  const o={},b=body||{},err=c=>Object.assign(new Error(c),{code:c});
  if('name'in b){o.name=line(b.name,120);if(!o.name)throw err('invalid_name')}
  if('audience_id'in b){if(b.audience_id==null||b.audience_id==='')o.audience_id=null;else{if(!UUID.test(String(b.audience_id)))throw err('audience_not_found');const[a]=await q('select id,name from audiences where id=$1 and user_id=$2',[b.audience_id,uid]);if(!a)throw err('audience_not_found');o.audience_id=a.id;o.audience_name=a.name}}
+ if('audience_id'in b&&!('segment_id'in b))o.segment_id=null;
+ if('audience_id'in b&&!('topic_id'in b))o.topic_id=null;
+ const aud=('audience_id'in b)?o.audience_id:(cur&&cur.audience_id);
+ if('segment_id'in b){if(b.segment_id==null||b.segment_id==='')o.segment_id=null;else{if(!UUID.test(String(b.segment_id))||!aud)throw err('segment_not_found');const[sg]=await q('select id from segments where id=$1 and user_id=$2 and audience_id=$3',[b.segment_id,uid,aud]);if(!sg)throw err('segment_not_found');o.segment_id=sg.id}}
+ if('topic_id'in b){if(b.topic_id==null||b.topic_id==='')o.topic_id=null;else{if(!UUID.test(String(b.topic_id))||!aud)throw err('topic_not_found');const[tp]=await q('select id from topics where id=$1 and user_id=$2 and audience_id=$3',[b.topic_id,uid,aud]);if(!tp)throw err('topic_not_found');o.topic_id=tp.id}}
  if('from'in b){const f=line(b.from,300);if(f){const p=parseAddr(f);if(!ADDR.test(p.email))throw err('invalid_from')}o.from_addr=f||null}
  if('reply_to'in b){const f=line(b.reply_to,254);if(f&&!ADDR.test(parseAddr(f).email))throw err('invalid_reply_to');o.reply_to=f||null}
  if('subject'in b)o.subject=line(b.subject,300);
@@ -27,7 +32,7 @@ async function fromReady(uid,from){
  const[d]=await q("select 1 from domains where user_id=$1 and name=$2 and status='verified' and sending_ok",[uid,dom]);if(d)return true;
  if(dom.endsWith('.'+BASE)){const slug=dom.slice(0,-(BASE.length+1));if(slug&&!slug.includes('.'))return(await q('select 1 from subdomains where slug=$1 and user_id=$2',[slug,uid])).length>0}
  return false}
-function fail(res,e){const c=e&&e.code;if(c&&/^(invalid_|audience_not_found|template_not_found)/.test(c))return res.status(c.endsWith('not_found')?404:400).json({error:c});throw e}
+function fail(res,e){const c=e&&e.code;if(c&&/^(invalid_|audience_not_found|template_not_found|segment_not_found|topic_not_found)/.test(c))return res.status(c.endsWith('not_found')?404:400).json({error:c});throw e}
 r.get('/',w(async(req,res)=>{
  const lim=Math.min(100,Math.max(1,parseInt(req.query.limit,10)||25)),off=Math.max(0,parseInt(req.query.offset,10)||0);
  const args=[req.user.id];let where='user_id=$1';if(req.query.status){args.push(String(req.query.status));where+=' and status=$'+args.length}
@@ -63,7 +68,7 @@ r.patch('/:id',w(async(req,res)=>{
 }));
 r.post('/:id/duplicate',w(async(req,res)=>{
  const b=await mine(req.user.id,req.params.id);if(!b)return res.status(404).json({error:'not_found'});
- const[n]=await q("insert into broadcasts(user_id,audience_id,audience_name,name,from_addr,reply_to,subject,template_id,html,text_body) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning "+COLS,[req.user.id,b.audience_id,b.audience_name,(b.name+' (copy)').slice(0,120),b.from_addr,b.reply_to,b.subject,b.template_id,b.html,b.text_body]);
+ const[n]=await q("insert into broadcasts(user_id,audience_id,audience_name,name,from_addr,reply_to,subject,template_id,html,text_body,segment_id,topic_id) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning "+COLS,[req.user.id,b.audience_id,b.audience_name,(b.name+' (copy)').slice(0,120),b.from_addr,b.reply_to,b.subject,b.template_id,b.html,b.text_body,b.segment_id,b.topic_id]);
  res.status(201).json(view(n))
 }));
 r.post('/:id/test',w(async(req,res)=>{
@@ -83,7 +88,7 @@ r.post('/:id/send',w(async(req,res)=>{
  if(!String(b.subject||'').trim())return res.status(400).json({error:'subject_required'});
  if(!b.html&&!b.text_body)return res.status(400).json({error:'empty_body'});
  if(!(await fromReady(req.user.id,b.from_addr)))return res.status(403).json({error:'domain_not_verified',domain:parseAddr(b.from_addr).email.split('@')[1]});
- const[n]=await q('select count(*)::int n from contacts where audience_id=$1 and not unsubscribed',[b.audience_id]);
+ const n={n:await B.count(b)};
  if(!n.n)return res.status(400).json({error:'audience_empty'});
  let at=null;
  if(req.body.scheduled_at){at=new Date(req.body.scheduled_at);if(isNaN(at)||at.getTime()<Date.now()+60000||at.getTime()>Date.now()+30*864e5)return res.status(400).json({error:'invalid_schedule'})}
