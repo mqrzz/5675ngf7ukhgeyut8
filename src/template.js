@@ -1,4 +1,4 @@
-const VAR=/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]{0,39})\s*\}\}/g;
+const VAR=/\{\{\{?\s*([a-zA-Z_][a-zA-Z0-9_]{0,39})\s*\}\}\}?/g;
 const ESC={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc=s=>String(s).replace(/[&<>"']/g,c=>ESC[c]);
 function vars(...parts){const out=new Set();for(const p of parts){if(!p)continue;String(p).replace(VAR,(m,k)=>{out.add(k);return m})}return[...out]}
