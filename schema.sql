@@ -173,3 +173,4 @@ create table if not exists contact_topics(topic_id uuid not null references topi
 alter table broadcasts add column if not exists segment_id uuid references segments on delete set null;
 alter table broadcasts add column if not exists topic_id uuid references topics on delete set null;
 alter table broadcast_recipients add column if not exists props jsonb;
+alter table broadcasts add column if not exists preview_text text;

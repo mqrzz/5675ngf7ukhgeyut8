@@ -18,6 +18,7 @@ function footer(url,html){
 function compose(b,r,url){
  const v={...(r.props||{}),first_name:r.first_name||'',last_name:r.last_name||'',email:r.email,unsubscribe_url:url};
  let html=b.html?TPL.render(b.html,v,true):null,text=b.text_body?TPL.render(b.text_body,v,false):null;
+ if(html&&b.preview_text){const pre='<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all">'+TPL.esc(TPL.render(b.preview_text,v,false))+'&#8199;&#847;'.repeat(40)+'</div>';html=/<body[^>]*>/i.test(html)?html.replace(/<body[^>]*>/i,m=>m+pre):pre+html}
  if(html){const f=footer(url,true);html=/<\/body>/i.test(html)?html.replace(/<\/body>/i,f+'</body>'):html+f}
  if(!html&&!text)throw E('empty_body');
  text=(text||'')+footer(url,false);

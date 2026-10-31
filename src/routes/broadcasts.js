@@ -4,7 +4,7 @@ const ADDR=/^[^\s@<>"',;]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$/i;
 const UUID=/^[0-9a-f-]{36}$/i;const BASE=(process.env.BASE_DOMAIN||'geserd.com').toLowerCase();
 const clip=(v,n)=>v==null?null:String(v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'').slice(0,n);
 const line=(v,n)=>{v=clip(v,n);return v==null?null:v.replace(/[\r\n]+/g,' ').trim()};
-const COLS='id,audience_id,audience_name,segment_id,topic_id,name,from_addr,reply_to,subject,template_id,status,error,total,sent,failed,skipped,scheduled_at,resume_at,started_at,finished_at,created_at,updated_at';
+const COLS='id,audience_id,audience_name,segment_id,topic_id,name,from_addr,reply_to,subject,preview_text,template_id,status,error,total,sent,failed,skipped,scheduled_at,resume_at,started_at,finished_at,created_at,updated_at';
 r.use(need);
 async function mine(uid,id){if(!UUID.test(String(id)))return null;const[b]=await q('select * from broadcasts where id=$1 and user_id=$2',[id,uid]);return b||null}
 function view(b){const o={};for(const k of COLS.split(','))o[k]=b[k];o.has_html=!!b.html;o.has_text=!!b.text_body;return o}
@@ -20,6 +20,7 @@ async function fields(uid,body,cur){
  if('from'in b){const f=line(b.from,300);if(f){const p=parseAddr(f);if(!ADDR.test(p.email))throw err('invalid_from')}o.from_addr=f||null}
  if('reply_to'in b){const f=line(b.reply_to,254);if(f&&!ADDR.test(parseAddr(f).email))throw err('invalid_reply_to');o.reply_to=f||null}
  if('subject'in b)o.subject=line(b.subject,300);
+ if('preview_text'in b)o.preview_text=line(b.preview_text,200)||null;
  if('html'in b)o.html=clip(b.html,1000000)||null;
  if('text'in b)o.text_body=clip(b.text,200000)||null;
  if('template_id'in b){
@@ -68,7 +69,7 @@ r.patch('/:id',w(async(req,res)=>{
 }));
 r.post('/:id/duplicate',w(async(req,res)=>{
  const b=await mine(req.user.id,req.params.id);if(!b)return res.status(404).json({error:'not_found'});
- const[n]=await q("insert into broadcasts(user_id,audience_id,audience_name,name,from_addr,reply_to,subject,template_id,html,text_body,segment_id,topic_id) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning "+COLS,[req.user.id,b.audience_id,b.audience_name,(b.name+' (copy)').slice(0,120),b.from_addr,b.reply_to,b.subject,b.template_id,b.html,b.text_body,b.segment_id,b.topic_id]);
+ const[n]=await q("insert into broadcasts(user_id,audience_id,audience_name,name,from_addr,reply_to,subject,preview_text,template_id,html,text_body,segment_id,topic_id) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) returning "+COLS,[req.user.id,b.audience_id,b.audience_name,(b.name+' (copy)').slice(0,120),b.from_addr,b.reply_to,b.subject,b.preview_text,b.template_id,b.html,b.text_body,b.segment_id,b.topic_id]);
  res.status(201).json(view(n))
 }));
 r.post('/:id/test',w(async(req,res)=>{
