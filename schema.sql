@@ -174,3 +174,4 @@ alter table broadcasts add column if not exists segment_id uuid references segme
 alter table broadcasts add column if not exists topic_id uuid references topics on delete set null;
 alter table broadcast_recipients add column if not exists props jsonb;
 alter table broadcasts add column if not exists preview_text text;
+create table if not exists idempotency_keys(user_id uuid not null references users(id) on delete cascade,key text not null,fp text,status int,body jsonb,created_at timestamptz not null default now(),primary key(user_id,key));

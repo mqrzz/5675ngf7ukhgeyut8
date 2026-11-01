@@ -2,9 +2,27 @@ const r=require('express').Router();
 const {q}=require('../db');const {w,need}=require('../auth');
 const {send,check,status}=require('../send');
 r.use(need);
+const IDEM=/^[\x21-\x7e]{1,255}$/;
+const fp=b=>require('crypto').createHash('sha256').update(JSON.stringify(b||{})).digest('hex');
 r.post('/',w(async(req,res)=>{
- try{res.json(await send(req.user.id,req.body||{},req.user.keyId))}
- catch(e){if(e&&e.code)return res.status(status(e.code)).json({error:e.code,...e.extra});throw e}
+ const key=req.get('Idempotency-Key');const print=fp(req.body);
+ if(key!==undefined){
+  if(!IDEM.test(key))return res.status(400).json({error:'invalid_idempotency_key'});
+  await q("delete from idempotency_keys where created_at<now()-interval '24 hours'");
+  const[ins]=await q('insert into idempotency_keys(user_id,key,fp) values($1,$2,$3) on conflict do nothing returning key',[req.user.id,key,print]);
+  if(!ins){
+   const[row]=await q('select fp,status,body from idempotency_keys where user_id=$1 and key=$2',[req.user.id,key]);
+   if(!row)return res.status(409).json({error:'idempotency_in_progress'});
+   if(row.fp!==print)return res.status(422).json({error:'idempotency_key_reused'});
+   if(!row.body)return res.status(409).json({error:'idempotency_in_progress'});
+   res.set('Idempotent-Replayed','true');return res.status(row.status).json(row.body)
+  }
+ }
+ try{const out=await send(req.user.id,req.body||{},req.user.keyId);
+  if(key)await q('update idempotency_keys set status=200,body=$3 where user_id=$1 and key=$2',[req.user.id,key,JSON.stringify(out)]);
+  res.json(out)}
+ catch(e){if(key)await q('delete from idempotency_keys where user_id=$1 and key=$2',[req.user.id,key]);
+  if(e&&e.code)return res.status(status(e.code)).json({error:e.code,...e.extra});throw e}
 }));
 r.post('/check',w(async(req,res)=>{
  try{res.json(await check(req.user.id,req.body||{}))}
