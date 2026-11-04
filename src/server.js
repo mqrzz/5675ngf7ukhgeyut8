@@ -3,7 +3,9 @@ const app=express();app.set('trust proxy',1);app.use('/api/emails',express.json(
 const GEO=require('./geo');
 app.get('/api/geo/check',GEO.check);
 app.get('/api/geo',GEO.info);
+const VPN=require('./vpn');VPN.start();app.get('/api/vpn',VPN.middleware);
 app.use('/api',GEO.enforce);
+app.use('/api',VPN.enforce);
 const MT=require('./maintenance');
 app.get('/api/maintenance',MT.publicState);
 app.use('/api',MT.enforce);
