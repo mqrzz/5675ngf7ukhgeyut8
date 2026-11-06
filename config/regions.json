@@ -1,0 +1,121 @@
+{
+ "default": "intl",
+ "regions": {
+  "ru": {
+   "countries": [
+    "RU"
+   ],
+   "login": [
+    "yandex",
+    "email"
+   ],
+   "currency": "RUB",
+   "display": "RUB",
+   "payment": "robokassa",
+   "data_region": "main"
+  },
+  "cis": {
+   "countries": [
+    "AM",
+    "AZ",
+    "BY",
+    "GE",
+    "KG",
+    "KZ",
+    "MD",
+    "TJ",
+    "TM",
+    "UZ"
+   ],
+   "login": [
+    "github",
+    "google",
+    "email"
+   ],
+   "currency": "RUB",
+   "display": "RUB",
+   "payment": "robokassa",
+   "data_region": "main"
+  },
+  "eu": {
+   "countries": "EU",
+   "login": [
+    "github",
+    "google",
+    "email"
+   ],
+   "currency": "RUB",
+   "display": "EUR",
+   "payment": "robokassa",
+   "data_region": "main"
+  },
+  "intl": {
+   "countries": "*",
+   "login": [
+    "github",
+    "google",
+    "email"
+   ],
+   "currency": "RUB",
+   "display": "USD",
+   "payment": "robokassa",
+   "data_region": "main"
+  }
+ },
+ "eu_countries": [
+  "AT",
+  "BE",
+  "BG",
+  "HR",
+  "CY",
+  "CZ",
+  "DK",
+  "EE",
+  "FI",
+  "FR",
+  "DE",
+  "GR",
+  "HU",
+  "IE",
+  "IT",
+  "LV",
+  "LT",
+  "LU",
+  "MT",
+  "NL",
+  "PL",
+  "PT",
+  "RO",
+  "SK",
+  "SI",
+  "ES",
+  "SE",
+  "IS",
+  "LI",
+  "NO",
+  "CH",
+  "GB",
+  "AD",
+  "MC",
+  "SM",
+  "VA",
+  "AL",
+  "BA",
+  "ME",
+  "MK",
+  "RS",
+  "XK"
+ ],
+ "data_regions": {
+  "main": {
+   "enabled": true,
+   "host": "geserd.com",
+   "location": "primary server"
+  },
+  "nl": {
+   "enabled": false,
+   "host": "nl.geserd.com",
+   "location": "Netherlands"
+  }
+ }
+}

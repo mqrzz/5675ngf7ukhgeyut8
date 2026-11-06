@@ -1,0 +1,18 @@
+[Unit]
+Description=Geserd API
+After=network.target postgresql.service
+
+[Service]
+User=geserd
+WorkingDirectory=/var/www/geserd-backend
+EnvironmentFile=/var/www/geserd-backend/.env
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=3
+MemoryMax=250M
+SupplementaryGroups=adm systemd-journal
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

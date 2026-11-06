@@ -1,0 +1,14 @@
+process.env.DATABASE_URL='postgres://geserd:pw@127.0.0.1:5432/geserd';process.env.SECRET_KEY='ab'.repeat(32);
+const R=require('path').join(__dirname,'..')+'/';
+const A=require(R+'src/automation');
+let ok=0,bad=0;const T=(n,v)=>{if(v){ok++;console.log('ok  ',n)}else{bad++;console.log('FAIL',n)}};
+const id='d6cd140d-76b6-47bd-9382-51898de58aa0';
+T('keeps valid send',A.cleanSteps([{type:'send',template_id:id,from:'hi@a.dev'}]).length===1);
+T('drops send without template',A.cleanSteps([{type:'send',from:'hi@a.dev'}]).length===0);
+T('keeps valid wait',A.cleanSteps([{type:'wait',minutes:5}])[0].minutes===5);
+T('drops zero wait',A.cleanSteps([{type:'wait',minutes:0}]).length===0);
+T('drops huge wait',A.cleanSteps([{type:'wait',minutes:999999}]).length===0);
+T('limits steps to ten',A.cleanSteps(Array.from({length:30},()=>({type:'wait',minutes:1}))).length===10);
+T('ignores non arrays',A.cleanSteps('x').length===0);
+T('ignores unknown types',A.cleanSteps([{type:'sms'}]).length===0);
+console.log(ok+' passed, '+bad+' failed');process.exit(bad?1:0);

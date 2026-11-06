@@ -1,0 +1,27 @@
+process.env.SSO_ALLOW_HTTP='1';
+const c=require('crypto'),http=require('http'),assert=require('assert');
+const S=require('../src/sso');
+const {publicKey,privateKey}=c.generateKeyPairSync('rsa',{modulusLength:2048});
+const jwk={...publicKey.export({format:'jwk'}),kid:'k1',use:'sig'};
+const b=o=>Buffer.from(JSON.stringify(o)).toString('base64url');
+function tok(body,head={alg:'RS256',kid:'k1'},key=privateKey){const u=b(head)+'.'+b(body);return u+'.'+c.sign('RSA-SHA256',Buffer.from(u),key).toString('base64url')}
+const now=Math.floor(Date.now()/1000);
+const good={iss:'http://idp.test',aud:'cid',exp:now+300,nonce:'n1',email:'a@corp.com',sub:'u1'};
+const o={issuer:'http://idp.test/',clientId:'cid',nonce:'n1'};
+const jw={keys:[jwk]};
+const fails=(name,fn,msg)=>{try{fn();console.log('FAIL not rejected:',name);process.exitCode=1}catch(e){console.log(e.message===msg?'ok   rejects '+name:'FAIL '+name+' got '+e.message);if(e.message!==msg)process.exitCode=1}};
+console.log('claims email:',S.verifyIdToken(tok(good),jw,o).email);
+fails('wrong nonce',()=>S.verifyIdToken(tok({...good,nonce:'x'}),jw,o),'bad_nonce');
+fails('wrong audience',()=>S.verifyIdToken(tok({...good,aud:'other'}),jw,o),'bad_aud');
+fails('wrong issuer',()=>S.verifyIdToken(tok({...good,iss:'http://evil'}),jw,o),'bad_iss');
+fails('expired',()=>S.verifyIdToken(tok({...good,exp:now-600}),jw,o),'expired');
+fails('alg none',()=>S.verifyIdToken(b({alg:'none'})+'.'+b(good)+'.',jw,o),'bad_alg');
+fails('unknown kid',()=>S.verifyIdToken(tok(good,{alg:'RS256',kid:'zz'}),jw,o),'unknown_key');
+const other=c.generateKeyPairSync('rsa',{modulusLength:2048}).privateKey;
+fails('forged signature',()=>S.verifyIdToken(tok(good,{alg:'RS256',kid:'k1'},other),jw,o),'bad_signature');
+assert.strictEqual(S.domainOf(' A@Corp.COM '),'corp.com');assert.strictEqual(S.domainOf('bad'),null);
+const p=S.pkce();assert.strictEqual(c.createHash('sha256').update(p.verifier).digest('base64url'),p.challenge);console.log('ok   pkce and domainOf');
+const srv=http.createServer((q,s)=>{s.setHeader('Content-Type','application/json');const base='http://127.0.0.1:'+srv.address().port;s.end(JSON.stringify({issuer:q.url.includes('bad')?'http://other':base,authorization_endpoint:base+'/a',token_endpoint:base+'/t',jwks_uri:base+'/j'}))});
+srv.listen(0,async()=>{const base='http://127.0.0.1:'+srv.address().port;
+ const d=await S.discover(base);console.log('ok   discovery',d.token_endpoint.endsWith('/t'));
+ srv.close();});
