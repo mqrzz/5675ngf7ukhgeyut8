@@ -22,8 +22,10 @@ printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-hostname-setu
 printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-admin.sh "$@"\n' > /usr/local/bin/geserd-admin; chmod 755 /usr/local/bin/geserd-admin
 printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-inbound-setup.sh "$@"\n' > /usr/local/bin/geserd-inbound-setup; chmod 755 /usr/local/bin/geserd-inbound-setup
 printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-geo-setup.sh "$@"\n' > /usr/local/bin/geserd-geo-setup; chmod 755 /usr/local/bin/geserd-geo-setup
+printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-geo-update.sh "$@"\n' > /usr/local/bin/geserd-geo-update; chmod 755 /usr/local/bin/geserd-geo-update
 printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-region.sh "$@"\n' > /usr/local/bin/geserd-region; chmod 755 /usr/local/bin/geserd-region
 printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-sso.sh "$@"\n' > /usr/local/bin/geserd-sso; chmod 755 /usr/local/bin/geserd-sso
+[ -f /var/lib/geserd/geo/dbip-country.mmdb ] || bash deploy/geserd-geo-update.sh || true
 systemctl restart geserd-api
 sleep 2
 curl -fsS localhost:3001/api/health; echo

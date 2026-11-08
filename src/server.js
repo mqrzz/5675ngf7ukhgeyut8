@@ -21,7 +21,7 @@ app.use('/api/siberia',require('./routes/siberia'));
 app.use('/api/metrics',require('./routes/metrics'));
 app.use('/api/logs',require('./routes/logs'));
 app.use('/api/webhooks',require('./routes/webhooks'));
-app.use('/api/contact',require('./routes/contact'));
+app.use('/api/contact',require('./routes/contact'));app.use('/api/newsletter',require('./routes/newsletter'));
 app.use('/api/templates',require('./routes/templates'));
 app.use('/api/audiences',require('./routes/audiences'));
 app.use('/api/broadcasts',require('./routes/broadcasts'));

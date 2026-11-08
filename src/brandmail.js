@@ -19,7 +19,7 @@ function render(o){
  '<tr><td bgcolor="#0b0b0d" style="background:#0b0b0d;background-image:linear-gradient(180deg,#17171a 0%,#0b0b0d 38%);border:1px solid #26292d;border-radius:28px;padding:40px 32px 36px;">'+tag+
  '<h1 style="margin:0 0 18px;color:#ffffff;font:400 28px/1.25 '+SERIF+';letter-spacing:-.4px;text-align:left;">'+esc(o.heading)+'</h1>'+body+btn+
  '<p style="margin:28px 0 0;padding-top:22px;border-top:1px solid #1f2226;color:#7b7f86;font:400 12.5px/1.6 '+SANS+';">'+esc(o.note||AUTO[lang])+'</p></td></tr>'+
- '<tr><td align="center" style="padding:32px 0 0;"><a href="'+APP+'" style="text-decoration:none;display:inline-block;"><img src="'+APP+'/assets/email/sent-with-light.png" width="180" height="66" alt="Sent with Geserd" style="display:inline-block;border:0;outline:none;width:180px;height:66px;"></a></td></tr>'+
+ '<tr><td align="center" style="padding:32px 0 0;"><a href="'+APP+'" style="text-decoration:none;display:inline-block;"><img src="'+APP+'/assets/email/sent-with-light.png" width="190" height="81" alt="Sent with Geserd" style="display:inline-block;border:0;outline:none;width:190px;height:81px;"></a></td></tr>'+
  '</table></td></tr></table></body></html>';
  return{html,text};
 }

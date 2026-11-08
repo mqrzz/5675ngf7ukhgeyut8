@@ -190,3 +190,5 @@ create table if not exists user_devices(
  unique(user_id,did,fp));
 create index if not exists user_devices_did on user_devices(did) where did<>'';
 create index if not exists user_devices_fp on user_devices(fp) where fp<>'';
+
+create table if not exists newsletter_subs(email text primary key,lang text not null default 'en',token text not null,confirmed_at timestamptz,unsubscribed_at timestamptz,created_at timestamptz not null default now(),ip text);

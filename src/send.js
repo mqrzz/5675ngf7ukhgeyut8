@@ -17,7 +17,7 @@ const hits=new Map();setInterval(()=>{const n=Date.now();for(const[k,v]of hits)i
 function rate(uid){const n=Date.now(),v=hits.get(uid);if(!v||n-v.t>=1000){hits.set(uid,{t:n,n:1});return true}if(v.n>=2)return false;v.n++;return true}
 const SITE=(process.env.APP_URL||'https://geserd.com').replace(/\/$/,'');
 const FOOT_TXT='\n\n--\nSent with Geserd \u00b7 '+SITE;
-const FOOT_HTML='<div style="text-align:center;margin:32px 0 0;padding:0;"><a href="'+SITE+'" style="text-decoration:none;display:inline-block;"><img src="'+SITE+'/assets/email/sent-with-light.png" width="180" height="66" alt="Sent with Geserd" style="display:inline-block;border:0;outline:none;width:180px;height:66px;"></a></div>';
+const FOOT_HTML='<div style="text-align:center;margin:32px 0 0;padding:0;"><a href="'+SITE+'" style="text-decoration:none;display:inline-block;"><img src="'+SITE+'/assets/email/sent-with-light.png" width="190" height="81" alt="Sent with Geserd" style="display:inline-block;border:0;outline:none;width:190px;height:81px;"></a></div>';
 function attachments(list){
  const out=[];let total=0;
  for(const a of arr(list)){
