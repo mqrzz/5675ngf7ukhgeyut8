@@ -5,7 +5,7 @@ const CTAH={en:'Open the conversation',ru:'Открыть переписку',fr
 const SUBJ={en:'Geserd support replied to your ticket',ru:'Поддержка Geserd ответила на ваше обращение',fr:'Le support Geserd a répondu à votre demande',de:'Der Geserd-Support hat auf Ihre Anfrage geantwortet'};
 const APP=(process.env.APP_URL||'https://geserd.com').replace(/\/$/,'');
 const ROLES=['owner','director','admin','support'];
-const AREA={mail:['owner','director','admin','support'],overview:['owner','director','admin','support'],tickets:['owner','director','admin','support'],users:['owner','director','admin','support'],review:['owner','director','admin'],risk:['owner','director','admin'],siberia:['owner','director','admin'],maintenance:['owner','director','admin'],incidents:['owner','director','admin'],'rating-rules':['owner','director'],analytics:['owner','director','admin'],sso:['owner','director'],staff:['owner','director'],me:ROLES};
+const AREA={newsletter:['owner','director','admin'],mail:['owner','director','admin','support'],overview:['owner','director','admin','support'],tickets:['owner','director','admin','support'],users:['owner','director','admin','support'],review:['owner','director','admin'],risk:['owner','director','admin'],siberia:['owner','director','admin'],maintenance:['owner','director','admin'],incidents:['owner','director','admin'],'rating-rules':['owner','director'],analytics:['owner','director','admin'],sso:['owner','director'],staff:['owner','director'],me:ROLES};
 const WRITE_ONLY={users:['owner','director','admin']};
 r.use(need,sessionOnly,w(async(req,res,next)=>{
  const [u]=await q('select id,email,is_admin,staff_role from users where id=$1',[req.user.id]);
@@ -248,6 +248,37 @@ r.put('/maintenance',w(async(req,res)=>{
  await q('update maintenance set active=$1,scope=$2,title=$3,message=$4,eta=$5,updated_at=now(),updated_by=$6 where id=1',[active,scope,title,message,eta,req.user.id]);
  await act(req.user.id,null,active?'maintenance_on':'maintenance_off',{scope,title,eta});
  MT.reset();res.json({ok:true,...(await MT.get())})}));
+r.get('/newsletter',w(async(req,res)=>{
+ res.set('Cache-Control','no-store');
+ const [c]=await q("select count(*) filter(where confirmed_at is not null and unsubscribed_at is null)::int confirmed,count(*) filter(where confirmed_at is null and unsubscribed_at is null)::int pending,count(*) filter(where unsubscribed_at is not null)::int unsubscribed from newsletter_subs");
+ const recent=await q("select email,lang,confirmed_at from newsletter_subs where confirmed_at is not null and unsubscribed_at is null order by confirmed_at desc limit 12");
+ const sends=await q("select id,subject,sent_at,total,sent,failed,done from newsletter_sends order by id desc limit 8");
+ res.json({...c,recent,sends})}));
+const NLSEND={busy:false};
+r.post('/newsletter/send',w(async(req,res)=>{
+ const b=req.body||{};const subject=String(b.subject||'').trim().slice(0,200),html=String(b.html||'');
+ if(!subject||html.length<10||html.length>400000)return res.status(422).json({error:'bad_input'});
+ const strip=h=>h.replace(/<style[\s\S]*?<\/style>/gi,'').replace(/<br\s*\/?>/gi,'\n').replace(/<\/(p|div|h\d|li|tr)>/gi,'\n').replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/\n{3,}/g,'\n\n').trim();
+ const mk=(to,token)=>{
+  const link=APP+'/newsletter/?t='+token;
+  const foot={en:'You receive this because you subscribed to Geserd news.',ru:'Вы получили это письмо, потому что подписались на новости Geserd.',fr:'Vous recevez ce message car vous êtes abonné aux actualités de Geserd.',de:'Sie erhalten diese Nachricht, weil Sie die Geserd-News abonniert haben.'};
+  const un={en:'Unsubscribe',ru:'Отписаться',fr:'Se désabonner',de:'Abbestellen'};
+  const l=to.lang||'en';
+  const block='<div style="margin:32px auto 0;max-width:600px;padding:0 16px;font:12.5px/1.6 Arial,sans-serif;color:#8a8d94;text-align:center">'+(foot[l]||foot.en)+' <a href="'+link+'" style="color:#8a8d94">'+(un[l]||un.en)+'</a></div>';
+  const out=html.includes('{{unsubscribe}}')?html.split('{{unsubscribe}}').join(link):(/<\/body>/i.test(html)?html.replace(/<\/body>/i,block+'</body>'):html+block);
+  return{from:{name:'Geserd',address:FROM},to:to.email,subject,html:out,text:strip(out)+'\n\n'+(un[l]||un.en)+': '+link,headers:{'List-Unsubscribe':'<'+link+'>','List-Unsubscribe-Post':'List-Unsubscribe=One-Click'}}};
+ if(b.test){
+  const [me]=await q('select email,lang from users where id=$1',[req.user.id]);
+  await transport.sendMail(mk({email:me.email,lang:me.lang},'0'.repeat(48)));
+  return res.json({ok:true,test:true,to:me.email})}
+ if(NLSEND.busy)return res.status(409).json({error:'busy'});
+ const subs=await q("select email,lang,token from newsletter_subs where confirmed_at is not null and unsubscribed_at is null");
+ if(!subs.length)return res.status(422).json({error:'no_subscribers'});
+ const [row]=await q('insert into newsletter_sends(subject,by_user,total) values($1,$2,$3) returning id',[subject,req.user.id,subs.length]);
+ NLSEND.busy=true;res.json({ok:true,id:row.id,total:subs.length});
+ (async()=>{let ok=0,bad=0;for(const s of subs){try{await transport.sendMail(mk(s,s.token));ok++}catch(e){bad++;console.error('newsletter send',e.message)}
+   if((ok+bad)%20===0)await q('update newsletter_sends set sent=$2,failed=$3 where id=$1',[row.id,ok,bad]).catch(()=>{});await new Promise(r=>setTimeout(r,150))}
+  await q('update newsletter_sends set sent=$2,failed=$3,done=true where id=$1',[row.id,ok,bad]).catch(()=>{});NLSEND.busy=false})().catch(()=>{NLSEND.busy=false})}));
 r.get('/maintenance/notice',w(async(req,res)=>{res.set('Cache-Control','no-store');res.json(await MT.getNotice())}));
 r.put('/maintenance/notice',w(async(req,res)=>{
  const b=req.body||{};const texts=MT.cleanTexts(b.texts);

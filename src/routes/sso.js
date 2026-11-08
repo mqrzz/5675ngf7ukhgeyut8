@@ -47,7 +47,7 @@ r.get('/callback',w(async(req,res)=>{
  let userId=acc&&acc.user_id;
  if(!userId){
   let [u]=await q('select id from users where email=$1',[email]);
-  if(!u){[u]=await q('insert into users(email,name) values($1,$2) returning id',[email,claims.name||null]);await require('../siberia').attach(u.id,email).catch(()=>{})}
+  if(!u){[u]=await q('insert into users(email,name) values($1,$2) returning id',[email,claims.name||null]);require('../sysmail').welcome(u.id);await require('../siberia').attach(u.id,email).catch(()=>{})}
   userId=u.id;
   await q('insert into oauth_accounts(provider,provider_uid,user_id) values($1,$2,$3) on conflict do nothing',['sso:'+st.d,claims.sub,userId])}
  await startSession(res,userId,req.ip,req.headers['user-agent']);

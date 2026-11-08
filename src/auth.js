@@ -13,7 +13,9 @@ const SESSION_DAYS=30;
 async function startSession(res,userId,ip,ua){
  const token=c.randomBytes(32).toString('base64url');
  const[t]=await q('select 1 from user_totp where user_id=$1 and enabled',[userId]);
+ const[sn]=await q('select count(*)::int total,count(*) filter(where ip=$2)::int same from sessions where user_id=$1',[userId,ip||'']);
  await q('insert into sessions(token_hash,user_id,ip,ua,expires_at,mfa_ok) values($1,$2,$3,$4,now()+interval \''+SESSION_DAYS+' days\',$5)',[sha(token),userId,ip||null,ua?String(ua).slice(0,300):null,!t]);
+ if(sn&&sn.total>0&&sn.same===0&&ip){let g=null;try{g=require('geoip-lite').lookup(ip)}catch(e){}require('./sysmail').toUser(userId,'signin',{where:(g&&g.country?g.country+', ':'')+ip})}
  res.cookie('gs_sid',token,{httpOnly:true,secure:true,sameSite:'lax',maxAge:SESSION_DAYS*86400000,path:'/'});
 }
 module.exports={sha,w,need,sessionOnly,allowBlocked,allowMfa,startSession};

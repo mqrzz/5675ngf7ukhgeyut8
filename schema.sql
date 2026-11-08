@@ -192,3 +192,5 @@ create index if not exists user_devices_did on user_devices(did) where did<>'';
 create index if not exists user_devices_fp on user_devices(fp) where fp<>'';
 
 create table if not exists newsletter_subs(email text primary key,lang text not null default 'en',token text not null,confirmed_at timestamptz,unsubscribed_at timestamptz,created_at timestamptz not null default now(),ip text);
+create table if not exists mail_marks(k text primary key,at timestamptz not null default now());
+create table if not exists newsletter_sends(id serial primary key,subject text not null,sent_at timestamptz not null default now(),by_user uuid,total int not null default 0,sent int not null default 0,failed int not null default 0,done boolean not null default false);

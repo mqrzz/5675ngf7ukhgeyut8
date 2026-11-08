@@ -41,7 +41,7 @@ r.post('/enable',...guard,w(async(req,res)=>{
  const s=TOTP.check(dec(row.secret_enc),(req.body||{}).code,null);
  if(s==null)return res.status(400).json({error:'invalid_code'});
  const codes=TOTP.recoveryCodes(8);
- await q('update user_totp set enabled=true,enabled_at=now(),last_step=$2,recovery=$3 where user_id=$1',[req.user.id,s,codes.map(TOTP.hashRec)]);
+ await q('update user_totp set enabled=true,enabled_at=now(),last_step=$2,recovery=$3 where user_id=$1',[req.user.id,s,codes.map(TOTP.hashRec)]);require('../sysmail').toUser(req.user.id,'twofa_on');
  res.json({ok:true,recovery:codes})}));
 r.post('/recovery',...guard,w(async(req,res)=>{
  if(limited('rc:'+req.user.id))return res.status(429).json({error:'rate_limited'});
@@ -54,7 +54,7 @@ r.post('/disable',...guard,w(async(req,res)=>{
  if(limited('di:'+req.user.id))return res.status(429).json({error:'rate_limited'});
  const v=await verifyAny(req.user.id,(req.body||{}).code);
  if(!v.ok)return res.status(400).json({error:v.error==='not_enabled'?'not_enabled':'invalid_code'});
- await q('delete from user_totp where user_id=$1',[req.user.id]);
+ await q('delete from user_totp where user_id=$1',[req.user.id]);require('../sysmail').toUser(req.user.id,'twofa_off');
  res.json({ok:true})}));
 const login=express.Router();
 login.post('/',allowMfa,need,w(async(req,res)=>{

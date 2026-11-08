@@ -105,7 +105,7 @@ async function send(uid,b,keyId){
  await q("insert into emails(id,user_id,domain_id,api_key_id,direction,from_addr,to_addrs,subject,html,text_body,message_id,status,attachments,spam_score,spam_rules,template_id) values($1,$2,$3,$4,'out',$5,$6,$7,$8,$9,$10,'queued',$11,$12,$13,$14)",
   [id,uid,d?d.id:null,keyId||null,m.from.email,JSON.stringify(rcpt),m.subject,m.html,m.text,mid,JSON.stringify(meta),sc?sc.score:null,sc?JSON.stringify(sc.rules):null,tplId]);
  const mon=new Date().toISOString().slice(0,7),day=new Date().toISOString().slice(0,10);
- for(const[lim,used,scope,key]of[[P.monthly,u.m,'monthly',mon],[P.daily,u.d,'daily',day]]){if(!lim)continue;const before=used/lim,after=(used+rcpt.length)/lim;for(const th of[0.8,1])if(before<th&&after>=th)notify(uid,'quota',th===1?'quota_full':'quota_80',scope+':'+Math.round(th*100),'/app/settings/usage/','quota:'+scope+':'+th+':'+key)}
+ for(const[lim,used,scope,key]of[[P.monthly,u.m,'monthly',mon],[P.daily,u.d,'daily',day]]){if(!lim)continue;const before=used/lim,after=(used+rcpt.length)/lim;for(const th of[0.8,1])if(before<th&&after>=th)notify(uid,'quota',th===1?'quota_full':'quota_80',scope+':'+Math.round(th*100),'/app/settings/usage/','quota:'+scope+':'+th+':'+key).then(ok=>{if(ok)require('./sysmail').toUser(uid,th===1?'q100':'q80',{scope,used:used+rcpt.length,limit:lim})})}
  try{
   const info=await transport.sendMail({...opts,envelope:{from:FROM,to:rcpt},dkim:signer||undefined});
   await emit(id,'sent',{accepted:info.accepted||rcpt,suppressed:[...sup]});
