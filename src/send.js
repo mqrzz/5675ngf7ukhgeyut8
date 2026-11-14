@@ -1,4 +1,4 @@
-const c=require('crypto');const MailComposer=require('nodemailer/lib/mail-composer');
+const SHARED=require('./shared');const UN=require('./unsub');const c=require('crypto');const MailComposer=require('nodemailer/lib/mail-composer');
 const {q}=require('./db');const {dec}=require('./secret');const PLANS=require('./plans');
 const {transport,FROM}=require('./mailer');const {emit}=require('./events');const {toText}=require('./text');const SET=require('./settings');const TPL=require('./template');const {notify}=require('./notify');const spam=require('./spam');
 const BASE=(process.env.BASE_DOMAIN||'geserd.com').toLowerCase();
@@ -6,7 +6,7 @@ const MAILHOST=(process.env.MAIL_HOST||'geserd.com').replace(/^mail\./,'');
 const ADDR=/^[^\s@<>"',;]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$/i;
 const CTRL=/[\r\n\u0000]/;
 const BLOCKED=/\.(exe|scr|bat|cmd|com|pif|vbs|vbe|js|jse|jar|msi|lnk|ps1|reg|dll|hta|cpl|wsf)$/i;
-const HDR=new Set(['list-unsubscribe','list-unsubscribe-post','x-entity-ref-id','x-priority']);
+const HDR=new Set(['list-unsubscribe','list-unsubscribe-post','x-entity-ref-id','x-priority','in-reply-to','references','auto-submitted','x-geserd-forwarded']);
 const MAXATT=10*1024*1024;
 const E=(code,extra)=>Object.assign(new Error(code),{code,extra:extra||{}});
 const STATUS={template_not_found:404,missing_variables:422,quota_exceeded:429,rate_limited:429,domain_not_verified:403,send_failed:502,spam_rejected:422,account_frozen:403,account_blocked:403,domain_not_allowed:403};
@@ -52,12 +52,12 @@ function normalize(b){
  if(reply&&!ADDR.test(reply))throw E('invalid_reply_to');
  if(CTRL.test(subject)||subject.length>998)throw E('invalid_subject');
  if(!html&&!text)throw E('empty_body');
- return{from,to,cc,bcc,all,reply,subject,html,text,attachments:attachments(b.attachments),headers:customHeaders(b.headers)}}
+ return{from,to,cc,bcc,all,reply,subject,html,text,attachments:attachments(b.attachments),headers:customHeaders(b.headers),marketing:b.unsubscribe===true}}
 async function resolve(uid,m){
  const dom=m.from.email.split('@')[1];let signer=null,ok=false;
  const [d]=await q("select * from domains where user_id=$1 and name=$2 and status='verified' and sending_ok",[uid,dom]);
- if(d){ok=true;signer={domainName:d.name,keySelector:d.dkim_selector,privateKey:dec(d.dkim_private_enc)}}
- else if(dom.endsWith('.'+BASE)){const slug=dom.slice(0,-(BASE.length+1));if(slug&&!slug.includes('.')&&(await q('select 1 from subdomains where slug=$1 and user_id=$2',[slug,uid])).length)ok=true}
+ if(d){ok=true;signer={domainName:d.name,keySelector:d.dkim_selector,privateKey:dec(d.dkim_private_enc),headerFieldNames:UN.SIGNED}}
+ else if(dom===SHARED.SHARED){const hd=SHARED.handleOf(m.from.email.split('@')[0]);if(hd&&(await q('select 1 from handles where handle=$1 and user_id=$2',[hd,uid])).length)ok=true}
  if(!ok)throw E('domain_not_verified',{domain:dom});
  return{d,signer}}
 function compose(m,plan,id,mid,rcpt){
@@ -84,6 +84,16 @@ async function send(uid,b,keyId){
  const[ust]=await q('select status from users where id=$1',[uid]);if(ust&&ust.status!=='active')throw E(ust.status==='blocked'?'account_blocked':'account_frozen');
  const cfg=await SET.get(uid);
  const m=normalize(b);
+ if(m.marketing){
+  if(m.all.length!==1)throw E('unsubscribe_single_recipient');
+  if(!UN.has(m.headers,'list-unsubscribe')){
+   const t=UN.tokenAddr(uid,m.all[0]),url=UN.page(t);
+   m.headers['List-Unsubscribe']='<'+UN.oneClick(t)+'>';m.headers['List-Unsubscribe-Post']='List-Unsubscribe=One-Click';
+   const ph=/\{\{\s*unsubscribe_url\s*\}\}/g;let seen=false;
+   if(m.html){seen=ph.test(m.html);m.html=m.html.replace(ph,url)}
+   if(m.text){ph.lastIndex=0;seen=seen||ph.test(m.text);m.text=m.text.replace(ph,url)}
+   if(!seen){if(m.html)m.html=/<\/body>/i.test(m.html)?m.html.replace(/<\/body>/i,UN.footer(url,true)+'</body>'):m.html+UN.footer(url,true);if(m.text||!m.html)m.text=(m.text||'')+UN.footer(url,false)}}}
+ const mk=UN.has(m.headers,'list-unsubscribe');
  if(!m.from.name&&cfg.default_from_name)m.from.name=cfg.default_from_name;
  if(!m.reply&&cfg.default_reply_to)m.reply=cfg.default_reply_to;
  if(!rate(uid))throw E('rate_limited');
@@ -93,7 +103,7 @@ async function send(uid,b,keyId){
  const [u]=await q("select coalesce(sum(jsonb_array_length(to_addrs)) filter(where created_at>=date_trunc('month',now())),0)::int m,coalesce(sum(jsonb_array_length(to_addrs)) filter(where created_at>=date_trunc('day',now())),0)::int d from emails where user_id=$1 and direction='out' and status<>'rejected'",[uid]);
  if(P.daily&&u.d+m.all.length>P.daily)throw E('quota_exceeded',{scope:'daily',limit:P.daily,used:u.d});
  if(P.monthly&&u.m+m.all.length>P.monthly)throw E('quota_exceeded',{scope:'monthly',limit:P.monthly,used:u.m});
- const sup=new Set((await q('select address from suppressions where user_id=$1 and address=any($2)',[uid,m.all])).map(x=>x.address));
+ const sup=new Set((await q('select address,reason from suppressions where user_id=$1 and address=any($2)',[uid,m.all])).filter(x=>x.reason!=='unsubscribed'||mk).map(x=>x.address));
  const rcpt=m.all.filter(a=>!sup.has(a));
  if(!rcpt.length)throw E('all_recipients_suppressed');
  const id=c.randomUUID(),mid='<'+id+'@'+MAILHOST+'>';
@@ -104,6 +114,7 @@ async function send(uid,b,keyId){
  const meta=m.attachments.map(a=>({filename:a.filename,content_type:a.contentType,size:a.content.length}));
  await q("insert into emails(id,user_id,domain_id,api_key_id,direction,from_addr,to_addrs,subject,html,text_body,message_id,status,attachments,spam_score,spam_rules,template_id) values($1,$2,$3,$4,'out',$5,$6,$7,$8,$9,$10,'queued',$11,$12,$13,$14)",
   [id,uid,d?d.id:null,keyId||null,m.from.email,JSON.stringify(rcpt),m.subject,m.html,m.text,mid,JSON.stringify(meta),sc?sc.score:null,sc?JSON.stringify(sc.rules):null,tplId]);
+ if(m.headers&&m.headers['in-reply-to']){const irt=m.headers['in-reply-to'];const tid=await require('./threads').thread(uid,[irt].concat(String(m.headers.references||'').split(/\s+/).filter(Boolean)),id);await q('update emails set in_reply_to=$2,thread_id=$3 where id=$1',[id,irt,tid])}
  const mon=new Date().toISOString().slice(0,7),day=new Date().toISOString().slice(0,10);
  for(const[lim,used,scope,key]of[[P.monthly,u.m,'monthly',mon],[P.daily,u.d,'daily',day]]){if(!lim)continue;const before=used/lim,after=(used+rcpt.length)/lim;for(const th of[0.8,1])if(before<th&&after>=th)notify(uid,'quota',th===1?'quota_full':'quota_80',scope+':'+Math.round(th*100),'/app/settings/usage/','quota:'+scope+':'+th+':'+key).then(ok=>{if(ok)require('./sysmail').toUser(uid,th===1?'q100':'q80',{scope,used:used+rcpt.length,limit:lim})})}
  try{
@@ -130,5 +141,5 @@ async function check(uid,b){
  if(m.html&&(m.html.match(/<a\s/gi)||[]).length>10)notes.push('many_links');
  if(m.html&&!/<img[^>]+alt=/i.test(m.html)&&/<img/i.test(m.html))notes.push('images_without_alt');
  if(!m.headers['List-Unsubscribe']&&!m.headers['list-unsubscribe'])notes.push('no_list_unsubscribe');
- return{domain:{name:dom,verified:!!(d&&d.status==='verified'&&d.sending_ok),subdomain:dom.endsWith('.'+BASE)},score:sc,notes}}
+ return{domain:{name:dom,verified:!!(d&&d.status==='verified'&&d.sending_ok),subdomain:dom===SHARED.SHARED},score:sc,notes}}
 module.exports={send,check,status,E,parseAddr};

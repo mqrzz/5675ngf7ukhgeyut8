@@ -20,7 +20,7 @@ async function tick(){
    while(i<steps.length){
     const s=steps[i];
     if(s.type==='wait'){await q("update automation_runs set status='pending',step_idx=$2,run_at=now()+($3||' minutes')::interval where id=$1",[r.id,i+1,String(s.minutes)]);i=-1;break}
-    if(s.type==='send'){await send(a.user_id,{from:s.from,to:[r.email],template_id:s.template_id,variables:{email:r.email,...(r.payload||{})}},null);i++}
+    if(s.type==='send'){await send(a.user_id,{from:s.from,to:[r.email],template_id:s.template_id,unsubscribe:true,variables:{email:r.email,...(r.payload||{})}},null);i++}
    }
    if(i>=0)await q("update automation_runs set status='done',step_idx=$2,finished_at=now() where id=$1",[r.id,i])
   }catch(e){await q("update automation_runs set status='failed',error=$2,finished_at=now() where id=$1",[r.id,String((e&&e.code)||e.message).slice(0,200)])}}}

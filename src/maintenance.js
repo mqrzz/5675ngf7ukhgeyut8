@@ -6,7 +6,7 @@ async function get(){
  return cache;
 }
 function reset(){cache=null;at=0}
-const OPEN=/^\/(health|status|maintenance|auth|admin|geo)(\/|$)/;
+const OPEN=/^\/(health|status|maintenance|auth|admin|geo|contact)(\/|$)/;
 async function enforce(req,res,next){
  const m=await get();
  if(!m.active||OPEN.test(req.path))return next();

@@ -1,4 +1,4 @@
-const r=require('express').Router();const {q}=require('../db');const {w,need}=require('../auth');
+const SHARED=require('../shared');const r=require('express').Router();const {q}=require('../db');const {w,need}=require('../auth');
 const {send,parseAddr,status}=require('../send');const B=require('../broadcast');
 const ADDR=/^[^\s@<>"',;]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,63}$/i;
 const UUID=/^[0-9a-f-]{36}$/i;const BASE=(process.env.BASE_DOMAIN||'geserd.com').toLowerCase();
@@ -31,7 +31,7 @@ async function fields(uid,body,cur){
 async function fromReady(uid,from){
  const e=parseAddr(from).email,dom=e.split('@')[1]||'';
  const[d]=await q("select 1 from domains where user_id=$1 and name=$2 and status='verified' and sending_ok",[uid,dom]);if(d)return true;
- if(dom.endsWith('.'+BASE)){const slug=dom.slice(0,-(BASE.length+1));if(slug&&!slug.includes('.'))return(await q('select 1 from subdomains where slug=$1 and user_id=$2',[slug,uid])).length>0}
+ if(dom===SHARED.SHARED){const hd=SHARED.handleOf(e.split('@')[0]);return!!hd&&(await q('select 1 from handles where handle=$1 and user_id=$2',[hd,uid])).length>0}
  return false}
 function fail(res,e){const c=e&&e.code;if(c&&/^(invalid_|audience_not_found|template_not_found|segment_not_found|topic_not_found)/.test(c))return res.status(c.endsWith('not_found')?404:400).json({error:c});throw e}
 r.get('/',w(async(req,res)=>{

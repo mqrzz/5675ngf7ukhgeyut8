@@ -4,6 +4,7 @@ set -e
 ENVF=/var/www/geserd-backend/.env
 [ -f "$ENVF" ] || { echo "missing $ENVF"; exit 1; }
 BASE=$(grep -m1 '^BASE_DOMAIN=' "$ENVF" | cut -d= -f2- || true); BASE=${BASE:-geserd.com}
+SHARED=$(grep -m1 '^SHARED_DOMAIN=' "$ENVF" | cut -d= -f2- || true); SHARED=${SHARED:-users.$BASE}
 eval "$(node -e '
 const u=new URL(process.argv[1]);
 const q=s=>"\x27"+String(s).replace(/\x27/g,"\x27\\\x27\x27")+"\x27";
@@ -20,7 +21,7 @@ hosts = $PGH
 user = $PGU
 password = $PGP
 dbname = $PGD
-query = SELECT '$2' FROM domains WHERE name = '%s' AND status = 'verified' AND receiving_ok UNION SELECT '$2' FROM subdomains WHERE slug || '.$BASE' = '%s' UNION SELECT '$2' WHERE '%s' = '$BASE' AND EXISTS (SELECT 1 FROM org_mailboxes)
+query = SELECT '$2' FROM domains WHERE name = '%s' AND status = 'verified' AND receiving_ok UNION SELECT '$2' WHERE '%s' = '$SHARED' AND EXISTS (SELECT 1 FROM handles) UNION SELECT '$2' WHERE '%s' = '$BASE' AND EXISTS (SELECT 1 FROM org_mailboxes)
 CF
   chown root:postfix "$1"; chmod 640 "$1"
 }
@@ -41,5 +42,5 @@ fi
 echo "== lookup test ($BASE should print a value once at least one organization mailbox exists; others print nothing)"
 for d in "$BASE" nonexistent-test-domain.invalid; do printf '%s -> ' "$d"; postmap -q "$d" pgsql:/etc/postfix/geserd-transport.cf || true; echo; done
 systemctl reload postfix
-echo "== done. Postfix now hands mail for verified receiving domains, claimed *.$BASE subdomains and the organization mailboxes at $BASE to 127.0.0.1:2525 (Geserd inbound). Antviz mail is untouched."
+echo "== done. Postfix now hands mail for verified receiving domains, claimed addresses at $SHARED and the organization mailboxes at $BASE to 127.0.0.1:2525 (Geserd inbound). Antviz mail is untouched."
 echo "Backup of main.cf: /etc/postfix/main.cf.geserd-$TS"

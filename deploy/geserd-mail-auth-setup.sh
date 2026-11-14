@@ -30,6 +30,8 @@ UserID opendkim
 CFG
 fi
 touch "$KT" "$ST"
+SIGNH='From,Sender,Reply-To,Subject,Date,Message-ID,To,Cc,MIME-Version,Content-Type,Content-Transfer-Encoding,In-Reply-To,References,List-Id,List-Help,List-Unsubscribe,List-Unsubscribe-Post,List-Subscribe,List-Post,List-Owner,List-Archive'
+if grep -q '^SignHeaders' "$CONF"; then sed -i "s|^SignHeaders.*|SignHeaders $SIGNH|" "$CONF"; else printf '\nSignHeaders %s\n' "$SIGNH" >> "$CONF"; fi
 grep -q "^$SEL._domainkey.$DOMAIN " "$KT" || echo "$SEL._domainkey.$DOMAIN $DOMAIN:$SEL:$KDIR/$SEL.private" >> "$KT"
 grep -q "^\*@$DOMAIN " "$ST" || echo "*@$DOMAIN $SEL._domainkey.$DOMAIN" >> "$ST"
 grep -q "^\*@\*.$DOMAIN " "$ST" || echo "*@*.$DOMAIN $SEL._domainkey.$DOMAIN" >> "$ST"   # sub-domains (users without their own domain) are signed with the parent key
@@ -45,16 +47,21 @@ echo "== 5/5 restart"
 systemctl enable opendkim >/dev/null 2>&1 || true
 systemctl restart opendkim; sleep 1; systemctl reload postfix
 systemctl is-active --quiet opendkim && echo "opendkim: running" || { echo "opendkim failed:"; journalctl -u opendkim -n 15 --no-pager; exit 1; }
+SHARED=${SHARED_DOMAIN:-users.$DOMAIN}
 PUB=$(tr -d '\n\t "' < "$KDIR/$SEL.txt" | sed 's/.*(\(v=DKIM1[^)]*\)).*/\1/')
 cat <<OUT
 
 =============================================================================
- ADD THESE 4 DNS RECORDS for $DOMAIN (Cloudflare / your DNS panel), then wait 5-15 minutes:
+ ADD THESE 6 DNS RECORDS for $DOMAIN (Cloudflare / your DNS panel), then wait 5-15 minutes:
 =============================================================================
  1) SPF      TXT  name: @                        value: v=spf1 ip4:$IP ~all
  2) DKIM     TXT  name: $SEL._domainkey            value: $PUB
  3) DMARC    TXT  name: _dmarc                    value: v=DMARC1; p=none; adkim=r; aspf=r; rua=mailto:postmaster@$DOMAIN
- 4) SPF for user sub-domains (optional, later)  TXT  name: *   value: v=spf1 ip4:$IP ~all
+ The shared domain for user addresses (name@$SHARED) needs these, once, and no wildcard record:
+ 4) SPF      TXT  name: ${SHARED%.$DOMAIN}                   value: v=spf1 ip4:$IP -all
+ 5) MX       MX   name: ${SHARED%.$DOMAIN}   priority 10     value: mail.$DOMAIN
+ 6) DMARC    TXT  name: _dmarc.${SHARED%.$DOMAIN}            value: v=DMARC1; p=none; adkim=r; aspf=r; rua=mailto:postmaster@$DOMAIN
+ (mail from the shared domain is signed with the DKIM key of $DOMAIN, so there is no extra DKIM record)
  Also make sure the PTR (reverse DNS) of $IP is mail.$DOMAIN — that is set in the hosting panel, not in DNS.
  (If a TXT value is longer than 255 chars your DNS panel may ask you to split it; Cloudflare does it automatically.)
  Check afterwards with:  geserd-mail-check your@gmail.com

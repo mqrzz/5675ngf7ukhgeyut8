@@ -64,4 +64,4 @@ async function check(uid,req){
  }
  return{flags:out}
 }
-module.exports={check,pair,T};
+module.exports={check,pair,T,device,saveDevice};

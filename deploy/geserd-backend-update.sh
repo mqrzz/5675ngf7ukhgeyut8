@@ -31,6 +31,7 @@ printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-region.sh "$@
 printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-sso.sh "$@"\n' > /usr/local/bin/geserd-sso; chmod 755 /usr/local/bin/geserd-sso
 [ -f /var/lib/geserd/geo/dbip-country.mmdb ] || bash deploy/geserd-geo-update.sh || true
 printf '#!/bin/sh\nexec bash /var/www/geserd-backend/deploy/geserd-doctor.sh "$@"\n' > /usr/local/bin/geserd-doctor; chmod 755 /usr/local/bin/geserd-doctor
+mkdir -p "$DIR/data"; chown -R geserd:geserd "$DIR/data" 2>/dev/null || true
 echo "== 5/5 restart"
 systemctl restart geserd-api
 sleep 2

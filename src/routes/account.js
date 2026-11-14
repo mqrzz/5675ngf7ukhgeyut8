@@ -43,15 +43,7 @@ r.get('/identities',w(async(req,res)=>{
  const rows=await q('select provider from oauth_accounts where user_id=$1 order by provider',[req.user.id]);
  res.json({email:u.email,created_at:u.created_at,providers:rows.map(x=>x.provider)})}));
 r.get('/export',w(async(req,res)=>{
- const id=req.user.id;
- const [user]=await q('select id,email,name,plan,lang,notify,send_settings,created_at from users where id=$1',[id]);
- const out={exported_at:new Date().toISOString(),user,
-  domains:await q('select name,status,sending_ok,receiving_ok,created_at from domains where user_id=$1 order by created_at',[id]),
-  api_keys:await q('select name,prefix,created_at,last_used_at,revoked_at from api_keys where user_id=$1 order by created_at',[id]),
-  webhooks:await q('select url,events,active,created_at from webhooks where user_id=$1 order by created_at',[id]),
-  templates:await q('select name,subject,html,text_body,created_at,updated_at from templates where user_id=$1 order by created_at',[id]),
-  suppressions:await q('select address,reason,created_at from suppressions where user_id=$1 order by created_at',[id]),
-  tickets:await q('select t.subject,t.topic,t.status,t.created_at,(select json_agg(json_build_object(\'author\',m.author,\'body\',m.body,\'at\',m.created_at) order by m.id) from ticket_messages m where m.ticket_id=t.id) messages from tickets t where t.user_id=$1 order by t.created_at',[id])};
+ const out=await require('../exportdata').build(req.user.id);
  res.set('Content-Type','application/json; charset=utf-8');
  res.set('Content-Disposition','attachment; filename="geserd-export.json"');
  res.send(JSON.stringify(out,null,1))}));

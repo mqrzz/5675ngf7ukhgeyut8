@@ -1,7 +1,7 @@
 const cfg=require('../config/geo.json');
 let db=null;try{db=require('geoip-lite')}catch(e){console.warn('geoip-lite not installed - run geserd-backend-update')}
 const BLOCKED=new Set(cfg.blocked.map(s=>String(s).toUpperCase()));
-const EXEMPT=[/^\/api\/geo(\/|$)/,/^\/api\/health$/,/^\/api\/unsubscribe\//,/^\/api\/billing\/robokassa\/(result|success|fail)$/];
+const EXEMPT=[/^\/api\/geo(\/|$)/,/^\/api\/health$/,/^\/api\/unsubscribe\//,/^\/api\/contact(\/|$)/,/^\/api\/billing\/robokassa\/(result|success|fail)$/];
 function clean(ip){return String(ip||'').replace(/^::ffff:/,'')}
 const fs=require('fs');
 const MMDB=process.env.GEO_MMDB||'/var/lib/geserd/geo/dbip-country.mmdb';
@@ -10,7 +10,7 @@ function loadMm(){
  const now=Date.now();if(now-mmChecked<60000)return;mmChecked=now;
  let st;try{st=fs.statSync(MMDB)}catch(e){mm=null;mmStamp=0;return}
  if(st.mtimeMs===mmStamp)return;mmStamp=st.mtimeMs;
- try{mm=require('maxmind').openSync(MMDB)}catch(e){mm=null;console.warn('geo mmdb not readable:',e.message)}
+ require('maxmind').open(MMDB).then(r=>{mm=r}).catch(e=>{mm=null;console.warn('geo mmdb not readable:',e.message)})
 }
 function fromMm(ip){try{loadMm();const r=mm&&mm.get(ip);const c=r&&((r.country&&r.country.iso_code)||(r.registered_country&&r.registered_country.iso_code));return c?String(c).toUpperCase():null}catch(e){return null}}
 function fromLite(ip){try{const g=db&&db.lookup(ip);return g&&g.country?String(g.country).toUpperCase():null}catch(e){return null}}

@@ -5,7 +5,7 @@ const CTAH={en:'Open the conversation',ru:'Открыть переписку',fr
 const SUBJ={en:'Geserd support replied to your ticket',ru:'Поддержка Geserd ответила на ваше обращение',fr:'Le support Geserd a répondu à votre demande',de:'Der Geserd-Support hat auf Ihre Anfrage geantwortet'};
 const APP=(process.env.APP_URL||'https://geserd.com').replace(/\/$/,'');
 const ROLES=['owner','director','admin','support'];
-const AREA={newsletter:['owner','director','admin'],mail:['owner','director','admin','support'],overview:['owner','director','admin','support'],tickets:['owner','director','admin','support'],users:['owner','director','admin','support'],review:['owner','director','admin'],risk:['owner','director','admin'],siberia:['owner','director','admin'],maintenance:['owner','director','admin'],incidents:['owner','director','admin'],'rating-rules':['owner','director'],analytics:['owner','director','admin'],sso:['owner','director'],staff:['owner','director'],me:ROLES};
+const AREA={newsletter:['owner','director','admin'],mail:['owner','director','admin','support'],overview:['owner','director','admin','support'],tickets:['owner','director','admin','support'],users:['owner','director','admin','support'],review:['owner','director','admin'],risk:['owner','director','admin'],siberia:['owner','director','admin'],maintenance:['owner','director','admin'],incidents:['owner','director','admin'],'rating-rules':['owner','director'],analytics:['owner','director','admin'],sso:['owner','director'],staff:['owner','director'],me:ROLES,counts:ROLES,audit:['owner','director','admin']};
 const WRITE_ONLY={users:['owner','director','admin']};
 r.use(need,sessionOnly,w(async(req,res,next)=>{
  const [u]=await q('select id,email,is_admin,staff_role from users where id=$1',[req.user.id]);
@@ -24,7 +24,7 @@ const RANK={owner:4,director:3,admin:2,support:1};
 const staffView=x=>({id:x.id,email:x.email,name:x.name,role:ROLES.includes(x.staff_role)?x.staff_role:'admin',created_at:x.created_at,last_seen:x.last_seen||null});
 r.get('/staff',w(async(req,res)=>{
  const rows=await q("select u.id,u.email,u.name,u.staff_role,u.created_at,(select max(created_at) from sessions s where s.user_id=u.id) last_seen from users u where u.is_admin order by case u.staff_role when 'owner' then 0 when 'director' then 1 when 'admin' then 2 else 3 end,u.created_at");
- res.json({me:req.staff.id,my_role:req.staff.role,items:rows.map(staffView),assignable:req.staff.role==='owner'?['director','admin','support']:['admin','support']})}));
+ res.json({me:req.staff.id,my_role:req.staff.role,items:rows.map(staffView),areas:AREA,assignable:req.staff.role==='owner'?['director','admin','support']:['admin','support']})}));
 r.post('/staff',w(async(req,res)=>{
  const b=req.body||{},email=String(b.email||'').trim().toLowerCase(),role=String(b.role||'');
  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return res.status(400).json({error:'invalid_email'});
@@ -90,7 +90,8 @@ r.get('/overview',w(async(req,res)=>{
  const[a]=await q("select count(*)::int total,count(*) filter(where created_at>now()-interval '7 days')::int new7,count(*) filter(where status='frozen')::int frozen,count(*) filter(where status='blocked')::int blocked,count(*) filter(where plan='free')::int free,count(*) filter(where plan='pro')::int pro,count(*) filter(where plan='business')::int business,count(*) filter(where plan='enterprise')::int enterprise,count(*) filter(where tariff='siberia')::int siberia from users");
  const[m]=await q("select coalesce(sum(sent),0)::int sent,coalesce(sum(bounced),0)::int bounced,coalesce(sum(complained),0)::int complained from metric_hours where hr>now()-interval '24 hours'");
  const[x]=await q("select (select count(*)::int from siberia_applications where status='pending') siberia_pending,(select count(*)::int from tickets where status='open') tickets_open,(select count(*)::int from risk_flags where status='open') flags_open");
- res.set('Cache-Control','no-store');res.json({users:a,mail24h:m,queues:x})}));
+ const daily=await q("select to_char(d,'YYYY-MM-DD') d,coalesce((select sum(sent) from metric_hours m where m.hr>=d and m.hr<d+interval '1 day'),0)::int sent,coalesce((select sum(bounced) from metric_hours m where m.hr>=d and m.hr<d+interval '1 day'),0)::int bounced,coalesce((select sum(complained) from metric_hours m where m.hr>=d and m.hr<d+interval '1 day'),0)::int complained,(select count(*)::int from users u where u.created_at>=d and u.created_at<d+interval '1 day') signups from generate_series(date_trunc('day',now())-interval '13 days',date_trunc('day',now()),interval '1 day') d order by d");
+ res.set('Cache-Control','no-store');res.json({users:a,mail24h:m,queues:x,daily})}));
 r.get('/users',w(async(req,res)=>{
  const a=[],w2=[];const qs=String(req.query.q||'').trim().slice(0,100);
  if(qs){a.push('%'+qs.replace(/[\\%_]/g,'\\$&')+'%');w2.push('(u.email ilike $'+a.length+' or u.name ilike $'+a.length+(ID.test(qs)?" or u.id='"+qs+"'":'')+')')}
@@ -101,7 +102,7 @@ r.get('/users',w(async(req,res)=>{
  const where=w2.length?' where '+w2.join(' and '):'';
  const lim=Math.min(100,Math.max(1,parseInt(req.query.limit,10)||50)),off=Math.max(0,parseInt(req.query.offset,10)||0);
  const[c]=await q('select count(*)::int n from users u'+where,a);
- const rows=await q("select u.id,u.email,u.name,u.plan,u.tariff,u.region,u.status,u.is_admin,u.created_at,(select count(*)::int from risk_flags f where f.user_id=u.id and f.status='open') flags from users u"+where+' order by u.created_at desc limit '+lim+' offset '+off,a);
+ const rows=await q("select u.id,u.email,u.name,u.plan,u.tariff,u.region,u.country,u.status,u.is_admin,u.created_at,(select max(s.created_at) from sessions s where s.user_id=u.id) last_seen,(select count(*)::int from risk_flags f where f.user_id=u.id and f.status='open') flags from users u"+where+' order by u.created_at desc limit '+lim+' offset '+off,a);
  res.set('Cache-Control','no-store');res.json({total:c.n,data:rows})}));
 r.get('/users/:id',w(async(req,res)=>{
  if(!ID.test(req.params.id))return res.status(404).json({error:'not_found'});
@@ -144,6 +145,9 @@ r.patch('/users/:id',w(async(req,res)=>{
   const note=String(b.note||'').trim().slice(0,1000);if(note)await act(req.user.id,u.id,'note',{note})
  }
  res.json({ok:true})}));
+r.get('/counts',w(async(req,res)=>{
+ const[a]=await q("select (select count(*)::int from risk_flags where status='open') flags_open,(select count(*)::int from risk_flags where status='reviewed') flags_reviewed,(select count(*)::int from risk_flags where status='dismissed') flags_dismissed,(select count(*)::int from risk_flags where status='open' and auto_action is not null) flags_auto,(select count(*)::int from siberia_applications where status='pending') sib_pending,(select count(*)::int from siberia_applications where status='approved') sib_approved,(select count(*)::int from siberia_applications where status='rejected') sib_rejected,(select count(*)::int from siberia_applications where status='revoked') sib_revoked,(select count(*)::int from tickets where status='open') tk_open,(select count(*)::int from tickets where status='closed') tk_closed,(select count(*)::int from tickets t where t.status='open' and (select author from ticket_messages m where m.ticket_id=t.id order by m.id desc limit 1)='user') tk_wait,(select count(*)::int from users where is_admin) staff");
+ res.set('Cache-Control','no-store');res.json(a)}));
 r.get('/risk',w(async(req,res)=>{
  const st=['open','reviewed','dismissed'].includes(req.query.status)?req.query.status:'open';
  const rows=await q("select f.id,f.kind,f.score,f.status,f.auto_action,f.decision,f.details,f.created_at,f.user_id,u.email,u.status user_status,u.review_notice,u.plan,f.related_id,o.email related_email,o.status related_status from risk_flags f join users u on u.id=f.user_id left join users o on o.id=f.related_id where f.status=$1 order by f.score desc,f.created_at desc limit 200",[st]);
@@ -203,7 +207,8 @@ const ssoView=x=>({domain:x.domain,issuer:x.issuer,client_id:x.client_id,enabled
 const cleanDomain=v=>String(v||'').trim().toLowerCase().replace(/^@/,'');
 const cleanIssuer=v=>String(v||'').trim().replace(/\/+$/,'');
 r.get('/sso',w(async(req,res)=>{
- res.json({redirect_uri:APP+'/api/auth/sso/callback',items:(await q('select domain,issuer,client_id,enabled,created_at from sso_connections order by created_at desc')).map(ssoView)})}));
+ const [lk]=await q("select count(*)::int n from oauth_accounts where provider like 'sso:%'");
+ res.json({redirect_uri:APP+'/api/auth/sso/callback',users:lk.n,items:(await q('select domain,issuer,client_id,enabled,created_at from sso_connections order by created_at desc')).map(ssoView)})}));
 r.post('/sso/check',w(async(req,res)=>{
  const issuer=cleanIssuer((req.body||{}).issuer);
  if(!/^https:\/\//.test(issuer)&&!process.env.SSO_ALLOW_HTTP)return res.status(400).json({error:'invalid_issuer'});
@@ -333,4 +338,5 @@ r.get('/analytics',w(async(req,res)=>{
  const refs=await q(`select ref,count(distinct sid)::int visitors from page_events where kind='view' and ts>${since} and ref<>'' group by ref order by visitors desc limit 10`);
  res.json({days,totals:tot,pages,countries,clicks,series,devices,refs})
 }));
+require('../adminaudit')(r,{q,w,act,setStatus});
 module.exports=r;

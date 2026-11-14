@@ -32,7 +32,16 @@ location @geo_blocked {
  rewrite ^ /unavailable/index.html break;
  add_header Cache-Control "no-store" always;
 }
-location ~ ^/(unavailable|countries|unsubscribe|assets|css|js|i18n)(/|$) {
+location ~ ^/api/contact(/|$) {
+ auth_request off;
+ client_max_body_size 14m;
+ proxy_pass http://127.0.0.1:3001;
+ proxy_set_header Host $host;
+ proxy_set_header X-Real-IP $remote_addr;
+ proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+ proxy_set_header X-Forwarded-Proto $scheme;
+}
+location ~ ^/(unavailable|countries|unsubscribe|contact|maintenance|vpn|assets|css|js|i18n)(/|$) {
  auth_request off;
  root /var/www/geserd;
  try_files $uri $uri/index.html =404;

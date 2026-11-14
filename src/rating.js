@@ -42,7 +42,7 @@ async function compute(uid){
  const sc=M.score(t);
  const dMax=F.deliverability.max;
  out.push(sc===null?{id:'deliverability',max:dMax,points:Math.round(dMax*F.deliverability.pending_share),state:'pending',detail:{sent:t.sent,need:F.deliverability.min_sends}}:{id:'deliverability',max:dMax,points:Math.round(dMax*sc/100),state:sc>=90?'full':sc>0?'partial':'none',detail:{score:sc,sent:t.sent,rates:M.rates(t)}});
- const[dm]=await q("select count(*) filter(where status='verified')::int custom,(select count(*)::int from subdomains where user_id=$1) own from domains where user_id=$1",[uid]);
+ const[dm]=await q("select count(*) filter(where status='verified')::int custom,(select count(*)::int from handles where user_id=$1) own from domains where user_id=$1",[uid]);
  const mx=F.domain.max;
  out.push(dm.custom>0?{id:'domain',max:mx,points:mx,state:'full',detail:{custom:dm.custom}}:dm.own>0?{id:'domain',max:mx,points:Math.round(mx*F.domain.subdomain_share),state:'partial',detail:{own:dm.own}}:{id:'domain',max:mx,points:0,state:'none',detail:{}});
  const age=Math.max(0,Math.floor((Date.now()-new Date(u.created_at).getTime())/86400000));

@@ -23,6 +23,7 @@ const throttle=new Map();
 setInterval(()=>{const now=Date.now();for(const[k,t]of throttle)if(now-t>60000)throttle.delete(k)},300000).unref();
 
 r.post('/request-code',w(async(req,res)=>{
+ if(await require('../devicegate').verdict(req,{cookie:true})==='blocked')return res.status(403).json({error:'device_blocked'});
  const email=String(req.body.email||'').trim().toLowerCase();
  if(!EMAIL_RX.test(email)||email.length>254)return res.status(400).json({error:'invalid_email'});
  const key=email+'|'+req.ip;
@@ -36,6 +37,7 @@ r.post('/request-code',w(async(req,res)=>{
 }));
 
 r.post('/verify-code',w(async(req,res)=>{
+ if(await require('../devicegate').verdict(req,{cookie:true})==='blocked')return res.status(403).json({error:'device_blocked'});
  const email=String(req.body.email||'').trim().toLowerCase();
  const code=String(req.body.code||'').trim();
  const [row]=await q('select * from login_codes where email=$1 and expires_at>now()',[email]);
@@ -97,6 +99,7 @@ r.get('/oauth/:provider',(req,res)=>{
 });
 
 r.get('/oauth/:provider/callback',w(async(req,res)=>{
+ if(await require('../devicegate').verdict(req,{cookie:true})==='blocked')return res.status(403).json({error:'device_blocked'});
  const name=req.params.provider,pr=PROVIDERS[name];
  if(!pr)return res.status(404).json({error:'unknown_provider'});
  if(!verifyState(req.query.state))return res.status(400).json({error:'bad_state'});
