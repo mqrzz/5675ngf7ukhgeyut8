@@ -257,8 +257,9 @@ r.get('/newsletter',w(async(req,res)=>{
  res.set('Cache-Control','no-store');
  const [c]=await q("select count(*) filter(where confirmed_at is not null and unsubscribed_at is null)::int confirmed,count(*) filter(where confirmed_at is null and unsubscribed_at is null)::int pending,count(*) filter(where unsubscribed_at is not null)::int unsubscribed from newsletter_subs");
  const recent=await q("select email,lang,confirmed_at from newsletter_subs where confirmed_at is not null and unsubscribed_at is null order by confirmed_at desc limit 12");
- const sends=await q("select id,subject,sent_at,total,sent,failed,done from newsletter_sends order by id desc limit 8");
- res.json({...c,recent,sends})}));
+ const sends=await q("select id,subject,sent_at,total,sent,failed,done from newsletter_sends order by id desc limit 30");
+ const subs=await q("select email,lang,created_at,confirmed_at,unsubscribed_at from newsletter_subs order by created_at desc limit 300");
+ res.json({...c,recent,sends,subs})}));
 const NLSEND={busy:false};
 r.post('/newsletter/send',w(async(req,res)=>{
  const b=req.body||{};const subject=String(b.subject||'').trim().slice(0,200),html=String(b.html||'');
